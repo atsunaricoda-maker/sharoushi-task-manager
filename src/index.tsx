@@ -2,15 +2,23 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serveStatic } from 'hono/cloudflare-workers'
 import { logger } from 'hono/logger'
+import { getCookie, setCookie } from 'hono/cookie'
+import { generateToken, verifyToken, getUserByEmail, upsertUser } from './lib/auth'
+import { GeminiService } from './lib/gemini'
 
 // TypeScript types for Cloudflare bindings
 type Bindings = {
   DB: D1Database
   KV: KVNamespace
   ENVIRONMENT: string
+  GOOGLE_CLIENT_ID: string
+  GOOGLE_CLIENT_SECRET: string
+  JWT_SECRET: string
+  GEMINI_API_KEY: string
+  APP_URL: string
+  REDIRECT_URI: string
 }
 
-// Create Hono app with bindings
 const app = new Hono<{ Bindings: Bindings }>()
 
 // Middleware
@@ -20,14 +28,38 @@ app.use('/api/*', cors({
   credentials: true
 }))
 
-// Serve static files from public directory
+// Serve static files
 app.use('/static/*', serveStatic({ root: './public' }))
 app.use('/favicon.ico', serveStatic({ root: './public' }))
 
-// Health check endpoint
+// Authentication check middleware for API routes
+async function checkAuth(c: any, next: any) {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  
+  if (!payload) {
+    return c.json({ error: 'Invalid token' }, 401)
+  }
+  
+  c.set('user', payload)
+  await next()
+}
+
+// Apply auth middleware to protected routes
+app.use('/api/tasks/*', checkAuth)
+app.use('/api/clients/*', checkAuth)
+app.use('/api/users/*', checkAuth)
+app.use('/api/dashboard/*', checkAuth)
+app.use('/api/ai/*', checkAuth)
+
+// Health check endpoint (public)
 app.get('/api/health', async (c) => {
   try {
-    // Test database connection
     const result = await c.env.DB.prepare('SELECT 1 as test').first()
     return c.json({ 
       status: 'healthy',
@@ -43,7 +75,204 @@ app.get('/api/health', async (c) => {
   }
 })
 
-// API Routes: Tasks
+// Google OAuth login
+app.get('/auth/google', (c) => {
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
+  authUrl.searchParams.append('client_id', c.env.GOOGLE_CLIENT_ID)
+  authUrl.searchParams.append('redirect_uri', c.env.REDIRECT_URI)
+  authUrl.searchParams.append('response_type', 'code')
+  authUrl.searchParams.append('scope', 'email profile')
+  authUrl.searchParams.append('access_type', 'offline')
+  authUrl.searchParams.append('prompt', 'consent')
+  
+  return c.redirect(authUrl.toString())
+})
+
+// OAuth callback
+app.get('/auth/callback', async (c) => {
+  const code = c.req.query('code')
+  
+  if (!code) {
+    return c.redirect('/login?error=no_code')
+  }
+  
+  try {
+    // Exchange code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: c.env.GOOGLE_CLIENT_ID,
+        client_secret: c.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: c.env.REDIRECT_URI,
+        grant_type: 'authorization_code'
+      })
+    })
+    
+    const tokens = await tokenResponse.json()
+    
+    // Get user info from Google
+    const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`
+      }
+    })
+    
+    const googleUser = await userResponse.json()
+    
+    // Save or update user in database
+    const user = await upsertUser(
+      c.env.DB,
+      googleUser.email,
+      googleUser.name,
+      googleUser.picture
+    )
+    
+    // Generate JWT token
+    const jwt = await generateToken(user, c.env.JWT_SECRET)
+    
+    // Set cookie and redirect to dashboard
+    setCookie(c, 'auth-token', jwt, {
+      httpOnly: true,
+      secure: c.env.ENVIRONMENT === 'production',
+      sameSite: 'Lax',
+      maxAge: 86400 // 24 hours
+    })
+    
+    return c.redirect('/')
+  } catch (error) {
+    console.error('OAuth error:', error)
+    return c.redirect('/login?error=auth_failed')
+  }
+})
+
+// Logout
+app.get('/auth/logout', (c) => {
+  setCookie(c, 'auth-token', '', {
+    httpOnly: true,
+    secure: c.env.ENVIRONMENT === 'production',
+    sameSite: 'Lax',
+    maxAge: 0
+  })
+  return c.redirect('/login')
+})
+
+// Check authentication status
+app.get('/api/auth/status', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.json({ authenticated: false })
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.json({ authenticated: false })
+  }
+  
+  return c.json({ 
+    authenticated: true,
+    user: {
+      email: payload.email,
+      name: payload.name,
+      role: payload.role
+    }
+  })
+})
+
+// AI Task Generation API
+app.post('/api/ai/generate-tasks', async (c) => {
+  try {
+    const { client_id, month } = await c.req.json()
+    
+    // Get client information
+    const client = await c.env.DB.prepare(
+      'SELECT * FROM clients WHERE id = ?'
+    ).bind(client_id).first()
+    
+    if (!client) {
+      return c.json({ error: 'Client not found' }, 404)
+    }
+    
+    // Initialize Gemini service
+    const gemini = new GeminiService(c.env.GEMINI_API_KEY)
+    
+    // Generate tasks using AI
+    const generatedTasks = await gemini.generateTasksFromClientInfo(
+      client.name as string,
+      client.employee_count as number,
+      client.contract_plan as string,
+      month
+    )
+    
+    // Get current user from auth
+    const user = c.get('user')
+    const userId = parseInt(user.sub)
+    
+    // Save generated tasks to database
+    const savedTasks = []
+    for (const task of generatedTasks) {
+      const result = await c.env.DB.prepare(`
+        INSERT INTO tasks (
+          title, description, client_id, assignee_id, 
+          task_type, status, priority, due_date, estimated_hours
+        ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+      `).bind(
+        task.title,
+        task.description,
+        client_id,
+        userId,
+        task.task_type,
+        task.priority,
+        task.due_date,
+        task.estimated_hours
+      ).run()
+      
+      savedTasks.push({
+        id: result.meta.last_row_id,
+        ...task
+      })
+    }
+    
+    return c.json({
+      success: true,
+      message: `${savedTasks.length}個のタスクを自動生成しました`,
+      tasks: savedTasks
+    })
+  } catch (error) {
+    console.error('Task generation error:', error)
+    return c.json({ 
+      error: 'タスク生成に失敗しました',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
+// AI Task Description Enhancement
+app.post('/api/ai/enhance-description', async (c) => {
+  try {
+    const { task_title } = await c.req.json()
+    
+    const gemini = new GeminiService(c.env.GEMINI_API_KEY)
+    const description = await gemini.generateTaskDescription(task_title)
+    
+    return c.json({
+      success: true,
+      description
+    })
+  } catch (error) {
+    return c.json({ 
+      error: 'Description generation failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
+// Existing API routes (Tasks, Clients, Users, Dashboard)
 app.get('/api/tasks', async (c) => {
   try {
     const { status, assignee_id, client_id, priority } = c.req.query()
@@ -112,22 +341,20 @@ app.put('/api/tasks/:id', async (c) => {
     const body = await c.req.json()
     const { status, progress, actual_hours, notes } = body
 
-    // Check if status is changing to update history
     const currentTask = await c.env.DB.prepare('SELECT status FROM tasks WHERE id = ?').bind(id).first()
     
-    // Update task
     await c.env.DB.prepare(`
       UPDATE tasks 
       SET status = ?, progress = ?, actual_hours = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).bind(status, progress, actual_hours, notes, id).run()
 
-    // Add to history if status changed
     if (currentTask && currentTask.status !== status) {
+      const user = c.get('user')
       await c.env.DB.prepare(`
         INSERT INTO task_history (task_id, user_id, action, old_status, new_status)
-        VALUES (?, 1, 'updated', ?, ?)
-      `).bind(id, currentTask.status, status).run()
+        VALUES (?, ?, 'updated', ?, ?)
+      `).bind(id, parseInt(user.sub), currentTask.status, status).run()
     }
 
     return c.json({ 
@@ -139,7 +366,20 @@ app.put('/api/tasks/:id', async (c) => {
   }
 })
 
-// API Routes: Clients
+app.delete('/api/tasks/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    await c.env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(id).run()
+    
+    return c.json({ 
+      success: true,
+      message: 'タスクを削除しました'
+    })
+  } catch (error) {
+    return c.json({ error: 'Failed to delete task' }, 500)
+  }
+})
+
 app.get('/api/clients', async (c) => {
   try {
     const result = await c.env.DB.prepare(`
@@ -160,7 +400,6 @@ app.get('/api/clients', async (c) => {
   }
 })
 
-// API Routes: Users (Staff)
 app.get('/api/users', async (c) => {
   try {
     const result = await c.env.DB.prepare(`
@@ -181,38 +420,32 @@ app.get('/api/users', async (c) => {
   }
 })
 
-// API Routes: Dashboard Stats
 app.get('/api/dashboard/stats', async (c) => {
   try {
-    // Get today's tasks
     const todayTasks = await c.env.DB.prepare(`
       SELECT COUNT(*) as count FROM tasks 
       WHERE date(due_date) = date('now') 
       AND status != 'completed'
     `).first()
 
-    // Get overdue tasks
     const overdueTasks = await c.env.DB.prepare(`
       SELECT COUNT(*) as count FROM tasks 
       WHERE date(due_date) < date('now') 
       AND status != 'completed'
     `).first()
 
-    // Get this week's tasks
     const weekTasks = await c.env.DB.prepare(`
       SELECT COUNT(*) as count FROM tasks 
       WHERE date(due_date) BETWEEN date('now') AND date('now', '+7 days')
       AND status != 'completed'
     `).first()
 
-    // Get task status distribution
     const statusDistribution = await c.env.DB.prepare(`
       SELECT status, COUNT(*) as count 
       FROM tasks 
       GROUP BY status
     `).all()
 
-    // Get workload by assignee
     const workload = await c.env.DB.prepare(`
       SELECT 
         u.id,
@@ -239,8 +472,67 @@ app.get('/api/dashboard/stats', async (c) => {
   }
 })
 
-// Main page with dashboard
-app.get('/', (c) => {
+// Login page
+app.get('/login', (c) => {
+  return c.html(`
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - 社労士事務所タスク管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mb-4">
+                <i class="fas fa-briefcase text-blue-600 text-3xl"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900">社労士事務所タスク管理</h1>
+            <p class="text-gray-600 mt-2">業務の見える化と効率化を実現</p>
+        </div>
+        
+        <div class="space-y-4">
+            <button onclick="window.location.href='/auth/google'" class="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 rounded-lg px-6 py-3 hover:bg-gray-50 transition-colors">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" class="w-5 h-5">
+                <span class="font-medium text-gray-700">Googleアカウントでログイン</span>
+            </button>
+            
+            <div class="text-center text-sm text-gray-500 mt-4">
+                <p>※ 認証情報は安全に管理されます</p>
+            </div>
+        </div>
+        
+        <div class="mt-8 pt-6 border-t border-gray-200">
+            <div class="flex items-center justify-center space-x-6 text-sm text-gray-500">
+                <a href="#" class="hover:text-gray-700">利用規約</a>
+                <span>•</span>
+                <a href="#" class="hover:text-gray-700">プライバシーポリシー</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+  `)
+})
+
+// Main dashboard page
+app.get('/', async (c) => {
+  // Check authentication
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
   return c.html(`
 <!DOCTYPE html>
 <html lang="ja">
@@ -269,6 +561,23 @@ app.get('/', (c) => {
         .animate-slide-in {
             animation: slideIn 0.3s ease-out;
         }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -282,20 +591,15 @@ app.get('/', (c) => {
                         社労士事務所タスク管理
                     </h1>
                 </div>
-                <nav class="flex space-x-4">
-                    <button class="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium">
-                        <i class="fas fa-home mr-1"></i>ダッシュボード
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-600">
+                        <i class="fas fa-user-circle mr-1"></i>
+                        ${payload.name}
+                    </span>
+                    <button onclick="window.location.href='/auth/logout'" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-sign-out-alt"></i>
                     </button>
-                    <button class="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium">
-                        <i class="fas fa-tasks mr-1"></i>タスク
-                    </button>
-                    <button class="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium">
-                        <i class="fas fa-building mr-1"></i>顧問先
-                    </button>
-                    <button class="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium">
-                        <i class="fas fa-users mr-1"></i>スタッフ
-                    </button>
-                </nav>
+                </div>
             </div>
         </div>
     </header>
@@ -357,15 +661,17 @@ app.get('/', (c) => {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Recent Tasks -->
             <div class="bg-white rounded-lg shadow">
-                <div class="px-6 py-4 border-b">
+                <div class="px-6 py-4 border-b flex justify-between items-center">
                     <h2 class="text-lg font-semibold text-gray-900">
                         <i class="fas fa-clock mr-2 text-gray-600"></i>
                         直近のタスク
                     </h2>
+                    <button onclick="openTaskModal()" class="text-blue-600 hover:text-blue-700">
+                        <i class="fas fa-plus-circle"></i> 新規作成
+                    </button>
                 </div>
                 <div class="p-6">
                     <div id="taskList" class="space-y-3">
-                        <!-- Tasks will be loaded here -->
                         <div class="text-center py-8 text-gray-500">
                             <i class="fas fa-spinner fa-spin text-2xl"></i>
                             <p class="mt-2">読み込み中...</p>
@@ -388,9 +694,30 @@ app.get('/', (c) => {
             </div>
         </div>
 
+        <!-- AI Task Generation Section -->
+        <div class="mt-8 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-robot mr-2 text-purple-600"></i>
+                    AI自動タスク生成
+                </h3>
+                <span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Gemini AI</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <select id="aiClientSelect" class="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500">
+                    <option value="">顧問先を選択...</option>
+                </select>
+                <input type="month" id="aiMonthSelect" class="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500">
+                <button onclick="generateTasksWithAI()" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-magic mr-2"></i>タスクを自動生成
+                </button>
+            </div>
+            <div id="aiGenerationResult" class="mt-4"></div>
+        </div>
+
         <!-- Action Buttons -->
         <div class="mt-8 flex justify-center space-x-4">
-            <button class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg">
+            <button onclick="openTaskModal()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg">
                 <i class="fas fa-plus mr-2"></i>新規タスク作成
             </button>
             <button class="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors shadow-lg">
@@ -399,33 +726,156 @@ app.get('/', (c) => {
         </div>
     </main>
 
+    <!-- Task Modal -->
+    <div id="taskModal" class="modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
+            <div class="px-6 py-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-semibold">新規タスク作成</h3>
+                <button onclick="closeTaskModal()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <form id="taskForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">タスク名</label>
+                        <input type="text" name="title" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">説明</label>
+                        <textarea name="description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">顧問先</label>
+                            <select name="client_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">選択してください</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">担当者</label>
+                            <select name="assignee_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">選択してください</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">タイプ</label>
+                            <select name="task_type" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="regular">定期業務</option>
+                                <option value="irregular">不定期業務</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">優先度</label>
+                            <select name="priority" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="urgent">緊急</option>
+                                <option value="high">高</option>
+                                <option value="medium" selected>中</option>
+                                <option value="low">低</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">期限</label>
+                            <input type="date" name="due_date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">予定工数（時間）</label>
+                            <input type="number" name="estimated_hours" step="0.5" min="0.5" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closeTaskModal()" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                            キャンセル
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            作成
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
     <script>
+        let currentUser = null;
+        
+        // Initialize
+        async function init() {
+            try {
+                // Check auth status
+                const authRes = await axios.get('/api/auth/status');
+                if (authRes.data.authenticated) {
+                    currentUser = authRes.data.user;
+                    await loadDashboard();
+                    await loadClients();
+                    await loadUsers();
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Initialization error:', error);
+            }
+        }
+        
         // Load dashboard data
         async function loadDashboard() {
             try {
-                // Fetch stats
                 const statsRes = await axios.get('/api/dashboard/stats');
                 const stats = statsRes.data;
                 
-                // Update counts
                 document.getElementById('todayCount').textContent = stats.today;
                 document.getElementById('overdueCount').textContent = stats.overdue;
                 document.getElementById('weekCount').textContent = stats.thisWeek;
                 
-                // Find in-progress count
                 const inProgress = stats.statusDistribution.find(s => s.status === 'in_progress');
                 document.getElementById('inProgressCount').textContent = inProgress ? inProgress.count : 0;
                 
-                // Draw workload chart
                 drawWorkloadChart(stats.workload);
                 
-                // Fetch and display tasks
                 const tasksRes = await axios.get('/api/tasks?status=pending');
                 displayTasks(tasksRes.data.tasks);
                 
             } catch (error) {
                 console.error('Failed to load dashboard:', error);
+            }
+        }
+        
+        // Load clients for select options
+        async function loadClients() {
+            try {
+                const res = await axios.get('/api/clients');
+                const clients = res.data.clients;
+                
+                const selects = document.querySelectorAll('select[name="client_id"], #aiClientSelect');
+                selects.forEach(select => {
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">選択してください</option>' + 
+                        clients.map(c => \`<option value="\${c.id}">\${c.name}</option>\`).join('');
+                    if (currentValue) select.value = currentValue;
+                });
+            } catch (error) {
+                console.error('Failed to load clients:', error);
+            }
+        }
+        
+        // Load users for select options
+        async function loadUsers() {
+            try {
+                const res = await axios.get('/api/users');
+                const users = res.data.users;
+                
+                const selects = document.querySelectorAll('select[name="assignee_id"]');
+                selects.forEach(select => {
+                    select.innerHTML = '<option value="">選択してください</option>' + 
+                        users.map(u => \`<option value="\${u.id}">\${u.name}</option>\`).join('');
+                });
+            } catch (error) {
+                console.error('Failed to load users:', error);
             }
         }
         
@@ -511,25 +961,86 @@ app.get('/', (c) => {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        x: {
-                            stacked: true
-                        },
-                        y: {
-                            stacked: true,
-                            beginAtZero: true
-                        }
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
                     },
                     plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
+                        legend: { position: 'bottom' }
                     }
                 }
             });
         }
         
-        // Load dashboard on page load
-        document.addEventListener('DOMContentLoaded', loadDashboard);
+        // Task Modal Functions
+        function openTaskModal() {
+            document.getElementById('taskModal').classList.add('active');
+        }
+        
+        function closeTaskModal() {
+            document.getElementById('taskModal').classList.remove('active');
+            document.getElementById('taskForm').reset();
+        }
+        
+        // Task form submission
+        document.getElementById('taskForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const taskData = Object.fromEntries(formData);
+            
+            try {
+                await axios.post('/api/tasks', taskData);
+                closeTaskModal();
+                await loadDashboard();
+                alert('タスクを作成しました');
+            } catch (error) {
+                alert('タスクの作成に失敗しました');
+            }
+        });
+        
+        // AI Task Generation
+        async function generateTasksWithAI() {
+            const clientId = document.getElementById('aiClientSelect').value;
+            const month = document.getElementById('aiMonthSelect').value;
+            
+            if (!clientId || !month) {
+                alert('顧問先と対象月を選択してください');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('aiGenerationResult');
+            resultDiv.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-2xl text-purple-600"></i><p class="mt-2">AIがタスクを生成中...</p></div>';
+            
+            try {
+                const res = await axios.post('/api/ai/generate-tasks', {
+                    client_id: parseInt(clientId),
+                    month: month
+                });
+                
+                if (res.data.success) {
+                    resultDiv.innerHTML = \`
+                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                            <i class="fas fa-check-circle mr-2"></i>
+                            \${res.data.message}
+                        </div>
+                    \`;
+                    await loadDashboard();
+                }
+            } catch (error) {
+                resultDiv.innerHTML = \`
+                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                        <i class="fas fa-exclamation-circle mr-2"></i>
+                        タスク生成に失敗しました: \${error.response?.data?.error || 'Unknown error'}
+                    </div>
+                \`;
+            }
+        }
+        
+        // Set default month
+        document.getElementById('aiMonthSelect').value = new Date().toISOString().slice(0, 7);
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
