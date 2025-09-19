@@ -5,6 +5,10 @@ import { logger } from 'hono/logger'
 import { getCookie, setCookie } from 'hono/cookie'
 import { generateToken, verifyToken, getUserByEmail, upsertUser } from './lib/auth'
 import { GeminiService } from './lib/gemini'
+import { clientsRouter } from './routes/clients'
+import { reportsRouter } from './routes/reports'
+import { getClientsPage } from './pages/clients'
+import { getReportsPage } from './pages/reports'
 
 // TypeScript types for Cloudflare bindings
 type Bindings = {
@@ -56,6 +60,11 @@ app.use('/api/clients/*', checkAuth)
 app.use('/api/users/*', checkAuth)
 app.use('/api/dashboard/*', checkAuth)
 app.use('/api/ai/*', checkAuth)
+app.use('/api/reports/*', checkAuth)
+
+// Mount routers
+app.route('/api/clients', clientsRouter)
+app.route('/api/reports', reportsRouter)
 
 // Health check endpoint (public)
 app.get('/api/health', async (c) => {
@@ -1045,6 +1054,40 @@ app.get('/', async (c) => {
 </body>
 </html>
   `)
+})
+
+// Clients page
+app.get('/clients', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getClientsPage(payload.name))
+})
+
+// Reports page
+app.get('/reports', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getReportsPage(payload.name))
 })
 
 export default app
