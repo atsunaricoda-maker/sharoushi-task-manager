@@ -6,14 +6,13 @@
   "pages_build_output_dir": "./dist",
   
   // D1 Database for storing tasks, clients, and users
-  // 注意: D1 databaseは後で作成して設定
-  // "d1_databases": [
-  //   {
-  //     "binding": "DB",
-  //     "database_name": "sharoushi-db",
-  //     "database_id": "YOUR_DATABASE_ID" // Will be updated after creation
-  //   }
-  // ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sharoushi-task-manager-db",
+      "database_id": "27bfba63-7b20-402a-ba8b-5c5efe32ff67"
+    }
+  ],
 
   // KV Namespace for session storage and cache
   // 注意: KV namespaceは後で作成して設定
