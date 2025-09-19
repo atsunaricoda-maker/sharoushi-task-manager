@@ -15,7 +15,16 @@
     "db:seed": "wrangler d1 execute sharoushi-db --local --file=./seed.sql",
     "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed",
     "clean-port": "fuser -k 3000/tcp 2>/dev/null || true",
-    "test": "curl http://localhost:3000"
+    "test": "curl http://localhost:3000",
+    "git:init": "git init && git add . && git commit -m 'Initial commit'",
+    "git:push": "git push origin main",
+    "git:pull": "git pull origin main",
+    "git:status": "git status",
+    "git:commit": "git add . && git commit -m",
+    "git:branch": "git branch",
+    "git:checkout": "git checkout",
+    "github:setup": "gh repo create sharoushi-task-manager --private --source=. --remote=origin",
+    "github:deploy": "git push origin main"
   },
   "dependencies": {
     "hono": "^4.9.8",

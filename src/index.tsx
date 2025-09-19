@@ -7,8 +7,22 @@ import { generateToken, verifyToken, getUserByEmail, upsertUser } from './lib/au
 import { GeminiService } from './lib/gemini'
 import { clientsRouter } from './routes/clients'
 import { reportsRouter } from './routes/reports'
+import { notificationRouter } from './routes/notifications'
+import { gmailRouter } from './routes/gmail'
+import { calendarRouter } from './routes/calendar'
+import { projectsRouter } from './routes/projects'
+import { subsidiesRouter } from './routes/subsidies'
+import { adminRouter } from './routes/admin'
+import scheduleRouter from './routes/schedule'
 import { getClientsPage } from './pages/clients'
 import { getReportsPage } from './pages/reports'
+import { getSettingsPage } from './pages/settings'
+import { getGmailPage } from './pages/gmail'
+import { getCalendarPage } from './pages/calendar'
+import { getProjectsPage } from './pages/projects'
+import { getSubsidiesPage } from './pages/subsidies'
+import { getAdminDashboardPage } from './pages/admin-dashboard'
+import { getSchedulePage } from './pages/schedule'
 
 // TypeScript types for Cloudflare bindings
 type Bindings = {
@@ -19,6 +33,7 @@ type Bindings = {
   GOOGLE_CLIENT_SECRET: string
   JWT_SECRET: string
   GEMINI_API_KEY: string
+  SENDGRID_API_KEY: string
   APP_URL: string
   REDIRECT_URI: string
 }
@@ -61,10 +76,24 @@ app.use('/api/users/*', checkAuth)
 app.use('/api/dashboard/*', checkAuth)
 app.use('/api/ai/*', checkAuth)
 app.use('/api/reports/*', checkAuth)
+app.use('/api/notifications/*', checkAuth)
+app.use('/api/gmail/*', checkAuth)
+app.use('/api/calendar/*', checkAuth)
+app.use('/api/projects/*', checkAuth)
+app.use('/api/subsidies/*', checkAuth)
+app.use('/api/admin/*', checkAuth)
+app.use('/api/schedule/*', checkAuth)
 
 // Mount routers
+app.route('/api/schedule', scheduleRouter)
 app.route('/api/clients', clientsRouter)
 app.route('/api/reports', reportsRouter)
+app.route('/api/notifications', notificationRouter)
+app.route('/api/gmail', gmailRouter)
+app.route('/api/calendar', calendarRouter)
+app.route('/api/projects', projectsRouter)
+app.route('/api/subsidies', subsidiesRouter)
+app.route('/api/admin', adminRouter)
 
 // Health check endpoint (public)
 app.get('/api/health', async (c) => {
@@ -724,6 +753,52 @@ app.get('/', async (c) => {
             <div id="aiGenerationResult" class="mt-4"></div>
         </div>
 
+        <!-- Quick Links Navigation -->
+        <div class="mt-8 bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-th mr-2 text-gray-600"></i>
+                機能一覧
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <a href="/clients" class="flex items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                    <i class="fas fa-building text-blue-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">顧問先管理</span>
+                </a>
+                <a href="/reports" class="flex items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                    <i class="fas fa-chart-line text-green-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">レポート</span>
+                </a>
+                <a href="/calendar" class="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                    <i class="fas fa-calendar text-purple-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">カレンダー</span>
+                </a>
+                <a href="/gmail" class="flex items-center p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
+                    <i class="fas fa-envelope text-red-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">Gmail連携</span>
+                </a>
+                <a href="/projects" class="flex items-center p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                    <i class="fas fa-project-diagram text-indigo-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">プロジェクト</span>
+                </a>
+                <a href="/subsidies" class="flex items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
+                    <i class="fas fa-hand-holding-usd text-yellow-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">助成金管理</span>
+                </a>
+                <a href="/schedule" class="flex items-center p-4 bg-cyan-50 rounded-lg hover:bg-cyan-100 transition-colors">
+                    <i class="fas fa-calendar-alt text-cyan-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">スケジュール管理</span>
+                </a>
+                <a href="/settings" class="flex items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-cog text-gray-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">設定</span>
+                </a>
+                <a href="/admin" class="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                    <i class="fas fa-chart-line text-purple-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">管理者ダッシュボード</span>
+                </a>
+            </div>
+        </div>
+
         <!-- Action Buttons -->
         <div class="mt-8 flex justify-center space-x-4">
             <button onclick="openTaskModal()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg">
@@ -1089,5 +1164,135 @@ app.get('/reports', async (c) => {
   
   return c.html(getReportsPage(payload.name))
 })
+
+// Settings page
+app.get('/settings', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  const user = await getUserByEmail(c.env.DB, payload.email)
+  if (!user) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getSettingsPage(user.name, user.id))
+})
+
+// Gmail page
+app.get('/gmail', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getGmailPage(payload.name))
+})
+
+// Calendar page
+app.get('/calendar', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getCalendarPage(payload.name))
+})
+
+// Projects page
+app.get('/projects', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getProjectsPage(payload.name))
+})
+
+// Subsidies page
+app.get('/subsidies', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getSubsidiesPage(payload.name))
+})
+
+// Schedule page
+app.get('/schedule', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getSchedulePage(payload.name, payload.role || 'user'))
+})
+
+// Admin Dashboard page
+app.get('/admin', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  // 簡易的な管理者チェック（本番環境では適切な権限管理を実装）
+  // TODO: roleベースの権限管理を実装
+  
+  return c.html(getAdminDashboardPage(payload.name))
+})
+
+// Scheduled event handler for Cron Triggers
+export { scheduled } from './scheduled'
 
 export default app

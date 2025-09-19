@@ -1,0 +1,35 @@
+===========================================
+🎯 Google API設定ガイド - コピー用テンプレート
+===========================================
+
+1. 以下の内容を .dev.vars ファイルに貼り付けてください：
+
+# Google OAuth設定
+GOOGLE_CLIENT_ID=ここにクライアントIDを貼り付け
+GOOGLE_CLIENT_SECRET=ここにクライアントシークレットを貼り付け
+
+# JWT Secret（以下のランダム文字列をそのまま使用）
+JWT_SECRET=RIwFva8xN6Ee+tgp+TgE+n3VoyVyW87hFUq6uLe3UEY=
+
+# Gemini API Key
+GEMINI_API_KEY=ここにGemini APIキーを貼り付け
+
+# Sandbox環境用の設定（変更不要）
+APP_URL=https://3000-ivn6amwip8uhxdg63ar73-6532622b.e2b.dev
+REDIRECT_URI=https://3000-ivn6amwip8uhxdg63ar73-6532622b.e2b.dev/auth/callback
+
+===========================================
+2. 設定完了後の確認コマンド：
+
+# サービス再起動
+pm2 restart sharoushi-task-manager
+
+# ログ確認
+pm2 logs sharoushi-task-manager --nostream
+
+===========================================
+3. ログインテスト：
+
+https://3000-ivn6amwip8uhxdg63ar73-6532622b.e2b.dev/login
+
+===========================================

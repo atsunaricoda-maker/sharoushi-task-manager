@@ -1,0 +1,18 @@
+# Google OAuth設定（Google Cloud Consoleから取得）
+GOOGLE_CLIENT_ID=YOUR-CLIENT-ID.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-YOUR-CLIENT-SECRET
+
+# JWT Secret（ランダムな文字列を生成）
+# 生成方法: openssl rand -base64 32
+JWT_SECRET=your-random-jwt-secret-key-here-32-chars-minimum
+
+# Gemini API Key（Google AI Studioから取得）
+GEMINI_API_KEY=AIzaSy-YOUR-GEMINI-API-KEY
+
+# アプリケーション設定
+APP_URL=http://localhost:3000
+REDIRECT_URI=http://localhost:3000/auth/callback
+
+# Sandbox環境の場合は以下を使用
+# APP_URL=https://3000-ivn6amwip8uhxdg63ar73-6532622b.e2b.dev
+# REDIRECT_URI=https://3000-ivn6amwip8uhxdg63ar73-6532622b.e2b.dev/auth/callback

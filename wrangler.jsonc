@@ -28,5 +28,12 @@
     "ENVIRONMENT": "development",
     "APP_URL": "http://localhost:3000",
     "REDIRECT_URI": "http://localhost:3000/auth/callback"
+  },
+  
+  // Cron Triggers設定（定期実行）
+  // 毎週月曜日の午前6時（UTC）に助成金情報を自動更新
+  // 日本時間の午後3時
+  "triggers": {
+    "crons": ["0 6 * * MON"]
   }
 }
