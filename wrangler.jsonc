@@ -6,22 +6,24 @@
   "pages_build_output_dir": "./dist",
   
   // D1 Database for storing tasks, clients, and users
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "sharoushi-db",
-      "database_id": "YOUR_DATABASE_ID" // Will be updated after creation
-    }
-  ],
+  // 注意: D1 databaseは後で作成して設定
+  // "d1_databases": [
+  //   {
+  //     "binding": "DB",
+  //     "database_name": "sharoushi-db",
+  //     "database_id": "YOUR_DATABASE_ID" // Will be updated after creation
+  //   }
+  // ],
 
   // KV Namespace for session storage and cache
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "YOUR_KV_ID", // Will be updated after creation
-      "preview_id": "YOUR_KV_PREVIEW_ID"
-    }
-  ],
+  // 注意: KV namespaceは後で作成して設定
+  // "kv_namespaces": [
+  //   {
+  //     "binding": "KV",
+  //     "id": "YOUR_KV_ID", // Will be updated after creation
+  //     "preview_id": "YOUR_KV_PREVIEW_ID"
+  //   }
+  // ],
 
   // Environment variables (use wrangler secret put for production)
   "vars": {
