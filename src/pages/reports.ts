@@ -272,11 +272,16 @@ export function getReportsPage(userName: string): string {
             const [year, monthNum] = month.split('-');
             const period = document.getElementById('reportPeriod').value;
             
+            console.log('Generating report:', { type, year, monthNum, period });
+            
             try {
                 let reportData;
                 
                 if (type === 'monthly') {
-                    const res = await axios.get(\`/api/reports/monthly?year=\${year}&month=\${monthNum}\`);
+                    const url = \`/api/reports/monthly?year=\${year}&month=\${monthNum}\`;
+                    console.log('Requesting URL:', url);
+                    const res = await axios.get(url);
+                    console.log('API response:', res.status, res.data);
                     reportData = res.data;
                     displayMonthlyReport(reportData);
                 } else if (type === 'client') {
@@ -296,21 +301,39 @@ export function getReportsPage(userName: string): string {
                 }
                 
                 currentReport = reportData;
-                document.getElementById('reportContent').style.display = 'block';
+                console.log('Report generated successfully');
             } catch (error) {
                 console.error('Failed to generate report:', error);
-                alert('レポート生成に失敗しました');
+                console.error('Error details:', error.response?.data || error.message);
+                
+                // More specific error message
+                let errorMessage = 'レポート生成に失敗しました';
+                if (error.response?.status === 401) {
+                    errorMessage = 'ログインが必要です。再度ログインしてください。';
+                    window.location.href = '/login';
+                    return;
+                } else if (error.response?.status === 500) {
+                    errorMessage = 'サーバーエラーが発生しました。時間をおいて再度お試しください。';
+                } else if (error.response?.data?.message) {
+                    errorMessage = error.response.data.message;
+                }
+                
+                alert(errorMessage);
             }
         }
         
         function displayMonthlyReport(data) {
             // Update summary cards
-            document.getElementById('totalTasks').textContent = data.summary.total_tasks || 0;
+            const totalTasks = data.summary.total_tasks || 0;
+            const completedTasks = data.summary.completed_tasks || 0;
+            const overdueTasks = data.summary.overdue_tasks || 0;
+            
+            document.getElementById('totalTasks').textContent = totalTasks;
             document.getElementById('completionRate').textContent = 
-                Math.round((data.summary.completed_tasks / data.summary.total_tasks) * 100) + '%';
-            document.getElementById('overdueTasks').textContent = data.summary.overdue_tasks || 0;
+                totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) + '%' : '0%';
+            document.getElementById('overdueTasks').textContent = overdueTasks;
             document.getElementById('overdueRate').textContent = 
-                Math.round((data.summary.overdue_tasks / data.summary.total_tasks) * 100) + '%';
+                totalTasks > 0 ? Math.round((overdueTasks / totalTasks) * 100) + '%' : '0%';
             
             const efficiency = data.summary.total_estimated_hours > 0 
                 ? Math.round((data.summary.total_actual_hours / data.summary.total_estimated_hours) * 100)
@@ -346,13 +369,14 @@ export function getReportsPage(userName: string): string {
             // Update trend chart
             if (trendChart) trendChart.destroy();
             const ctx2 = document.getElementById('trendChart').getContext('2d');
+            const dailyTrend = data.dailyTrend || [];
             trendChart = new Chart(ctx2, {
                 type: 'line',
                 data: {
-                    labels: data.dailyTrend.map(d => d.date.split('-')[2] + '日'),
+                    labels: dailyTrend.length > 0 ? dailyTrend.map(d => d.date.split('-')[2] + '日') : ['データなし'],
                     datasets: [{
                         label: '完了率',
-                        data: data.dailyTrend.map(d => d.completion_rate),
+                        data: dailyTrend.length > 0 ? dailyTrend.map(d => d.completion_rate || 0) : [0],
                         borderColor: '#0066cc',
                         backgroundColor: 'rgba(0, 102, 204, 0.1)',
                         tension: 0.3
@@ -375,7 +399,8 @@ export function getReportsPage(userName: string): string {
             
             // Update client table
             const clientTable = document.getElementById('clientSummaryTable');
-            clientTable.innerHTML = data.byClient.map(client => \`
+            const byClient = data.byClient || [];
+            clientTable.innerHTML = byClient.length > 0 ? byClient.map(client => \`
                 <tr>
                     <td class="px-4 py-2 text-sm">\${client.client_name}</td>
                     <td class="px-4 py-2 text-sm text-center">\${client.task_count}</td>
@@ -389,11 +414,12 @@ export function getReportsPage(userName: string): string {
                         </div>
                     </td>
                 </tr>
-            \`).join('');
+            \`).join('') : '<tr><td colspan="4" class="px-4 py-2 text-sm text-center text-gray-500">データがありません</td></tr>';
             
             // Update staff table
             const staffTable = document.getElementById('staffSummaryTable');
-            staffTable.innerHTML = data.byAssignee.map(staff => \`
+            const byAssignee = data.byAssignee || [];
+            staffTable.innerHTML = byAssignee.length > 0 ? byAssignee.map(staff => \`
                 <tr>
                     <td class="px-4 py-2 text-sm">\${staff.assignee_name}</td>
                     <td class="px-4 py-2 text-sm text-center">\${staff.task_count}</td>
@@ -404,7 +430,7 @@ export function getReportsPage(userName: string): string {
                         </span>
                     </td>
                 </tr>
-            \`).join('');
+            \`).join('') : '<tr><td colspan="4" class="px-4 py-2 text-sm text-center text-gray-500">データがありません</td></tr>';
         }
         
         async function exportReport(format) {
