@@ -1,0 +1,403 @@
+-- Complete production database schema for sharoushi-task-manager
+-- This file consolidates all migrations into a single file for production deployment
+
+-- ユーザー（社労士）マスタ
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT DEFAULT 'sharoushi',
+  avatar_url TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 顧問先マスタ
+CREATE TABLE IF NOT EXISTS clients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  name_kana TEXT,
+  address TEXT,
+  contact_email TEXT,
+  contact_phone TEXT,
+  employee_count INTEGER DEFAULT 0,
+  health_insurance_type TEXT,
+  contract_plan TEXT,
+  primary_contact_name TEXT,
+  monthly_fee DECIMAL(10,2),
+  contract_start_date DATE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- タスクマスタ
+CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT,
+  client_id INTEGER NOT NULL,
+  assignee_id INTEGER NOT NULL,
+  task_type TEXT NOT NULL, -- 'regular' or 'irregular'
+  status TEXT DEFAULT 'pending', -- 'pending', 'in_progress', 'completed', 'overdue'
+  priority TEXT DEFAULT 'medium', -- 'urgent', 'high', 'medium', 'low'
+  due_date DATE,
+  estimated_hours DECIMAL(4,1),
+  actual_hours DECIMAL(4,1),
+  progress INTEGER DEFAULT 0, -- 0-100
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (client_id) REFERENCES clients (id),
+  FOREIGN KEY (assignee_id) REFERENCES users (id)
+);
+
+-- 定期業務マスタ
+CREATE TABLE IF NOT EXISTS regular_tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT,
+  client_id INTEGER NOT NULL,
+  frequency TEXT NOT NULL, -- 'monthly', 'quarterly', 'yearly'
+  due_day INTEGER, -- 5, 10, 20, etc.
+  estimated_hours DECIMAL(4,1),
+  auto_create BOOLEAN DEFAULT 1,
+  is_active BOOLEAN DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (client_id) REFERENCES clients (id)
+);
+
+-- 通知設定
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT DEFAULT 'info', -- 'info', 'warning', 'error', 'success'
+  is_read BOOLEAN DEFAULT 0,
+  related_type TEXT, -- 'task', 'client', etc.
+  related_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- Gmail同期設定
+CREATE TABLE IF NOT EXISTS gmail_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER UNIQUE NOT NULL,
+  is_enabled BOOLEAN DEFAULT 0,
+  auto_task_creation BOOLEAN DEFAULT 0,
+  label_filter TEXT,
+  last_sync_timestamp BIGINT DEFAULT 0,
+  oauth_access_token TEXT,
+  oauth_refresh_token TEXT,
+  oauth_token_expires_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- Gmailから作成されたタスク
+CREATE TABLE IF NOT EXISTS gmail_tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id INTEGER NOT NULL,
+  gmail_message_id TEXT UNIQUE NOT NULL,
+  gmail_thread_id TEXT,
+  gmail_subject TEXT,
+  gmail_sender TEXT,
+  gmail_received_at DATETIME,
+  auto_created BOOLEAN DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (task_id) REFERENCES tasks (id)
+);
+
+-- カレンダー同期設定
+CREATE TABLE IF NOT EXISTS calendar_sync (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER UNIQUE NOT NULL,
+  is_enabled BOOLEAN DEFAULT 0,
+  google_calendar_id TEXT,
+  sync_direction TEXT DEFAULT 'both', -- 'import', 'export', 'both'
+  last_sync_timestamp BIGINT DEFAULT 0,
+  oauth_access_token TEXT,
+  oauth_refresh_token TEXT,
+  oauth_token_expires_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- スケジュール管理
+CREATE TABLE IF NOT EXISTS schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  client_id INTEGER,
+  task_id INTEGER,
+  title TEXT NOT NULL,
+  description TEXT,
+  start_datetime DATETIME NOT NULL,
+  end_datetime DATETIME NOT NULL,
+  location TEXT,
+  is_all_day BOOLEAN DEFAULT 0,
+  reminder_minutes INTEGER DEFAULT 15,
+  google_event_id TEXT,
+  recurrence_rule TEXT, -- RRULE format for recurring events
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id),
+  FOREIGN KEY (client_id) REFERENCES clients (id),
+  FOREIGN KEY (task_id) REFERENCES tasks (id)
+);
+
+-- プロジェクト管理
+CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  client_id INTEGER NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'planning', -- planning, active, on_hold, completed, cancelled
+  priority TEXT DEFAULT 'medium', -- urgent, high, medium, low
+  start_date DATE,
+  due_date DATE,
+  budget DECIMAL(10,2),
+  progress REAL DEFAULT 0.0,
+  manager_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (client_id) REFERENCES clients (id),
+  FOREIGN KEY (manager_id) REFERENCES users (id)
+);
+
+-- プロジェクトメンバー
+CREATE TABLE IF NOT EXISTS project_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  role TEXT DEFAULT 'member', -- manager, member, observer
+  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects (id),
+  FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- プロジェクトマイルストーン
+CREATE TABLE IF NOT EXISTS project_milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  due_date DATE NOT NULL,
+  is_completed BOOLEAN DEFAULT 0,
+  completion_date DATE,
+  display_order INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects (id)
+);
+
+-- 助成金マスターテーブル
+CREATE TABLE IF NOT EXISTS subsidies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL, -- 助成金名（例：雇用調整助成金）
+  category TEXT NOT NULL, -- カテゴリ（雇用系、育成系、福祉系、創業系など）
+  managing_organization TEXT NOT NULL, -- 管理団体（厚生労働省、経済産業省など）
+  description TEXT,
+  max_amount INTEGER, -- 最大支給額
+  subsidy_rate REAL, -- 助成率（%）
+  requirements TEXT, -- 申請要件（JSON形式）
+  required_documents TEXT, -- 必要書類リスト（JSON形式）
+  application_period_type TEXT CHECK(application_period_type IN ('fixed', 'anytime', 'periodic')), -- 申請時期（固定期間、随時、定期）
+  application_start_date DATE,
+  application_end_date DATE,
+  url TEXT, -- 参考URL
+  is_active BOOLEAN DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 助成金申請プロジェクト
+CREATE TABLE IF NOT EXISTS subsidy_applications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subsidy_id INTEGER NOT NULL,
+  client_id INTEGER NOT NULL,
+  project_id INTEGER, -- 関連プロジェクト
+  status TEXT NOT NULL DEFAULT 'planning' CHECK(status IN (
+    'planning',        -- 計画中
+    'preparing',       -- 準備中
+    'document_check',  -- 書類確認中
+    'submitted',       -- 申請済み
+    'under_review',    -- 審査中
+    'approved',        -- 承認
+    'rejected',        -- 却下
+    'received',        -- 受給済み
+    'cancelled'        -- 取り下げ
+  )),
+  application_number TEXT, -- 申請番号
+  application_date DATE,
+  approval_date DATE,
+  amount_requested INTEGER, -- 申請金額
+  amount_approved INTEGER, -- 承認金額
+  amount_received INTEGER, -- 受給金額
+  submission_deadline DATE,
+  notes TEXT,
+  rejection_reason TEXT,
+  created_by INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (subsidy_id) REFERENCES subsidies(id),
+  FOREIGN KEY (client_id) REFERENCES clients(id),
+  FOREIGN KEY (project_id) REFERENCES projects(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- 申請書類管理
+CREATE TABLE IF NOT EXISTS subsidy_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL,
+  document_name TEXT NOT NULL,
+  document_type TEXT NOT NULL, -- 申請書、添付書類、証明書など
+  status TEXT DEFAULT 'not_started' CHECK(status IN ('not_started', 'in_progress', 'completed', 'submitted', 'rejected')),
+  drive_file_id TEXT, -- Google Drive連携
+  file_url TEXT,
+  due_date DATE,
+  completed_date DATE,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (application_id) REFERENCES subsidy_applications(id)
+);
+
+-- 申請チェックリスト
+CREATE TABLE IF NOT EXISTS subsidy_checklists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL,
+  item_name TEXT NOT NULL,
+  category TEXT, -- 要件確認、書類準備、提出前確認など
+  is_required BOOLEAN DEFAULT 1,
+  is_completed BOOLEAN DEFAULT 0,
+  completed_by INTEGER,
+  completed_at DATETIME,
+  notes TEXT,
+  display_order INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (application_id) REFERENCES subsidy_applications(id),
+  FOREIGN KEY (completed_by) REFERENCES users(id)
+);
+
+-- 助成金スケジュール（締切管理）
+CREATE TABLE IF NOT EXISTS subsidy_schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL,
+  event_type TEXT NOT NULL, -- 書類提出、面談、審査、報告書提出など
+  event_name TEXT NOT NULL,
+  scheduled_date DATE NOT NULL,
+  completed_date DATE,
+  location TEXT,
+  attendees TEXT, -- JSON形式
+  notes TEXT,
+  reminder_days_before INTEGER DEFAULT 7, -- リマインダー日数
+  calendar_event_id TEXT, -- Google Calendar連携
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (application_id) REFERENCES subsidy_applications(id)
+);
+
+-- 助成金進捗履歴
+CREATE TABLE IF NOT EXISTS subsidy_progress_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL,
+  action_type TEXT NOT NULL, -- status_change, document_upload, checklist_update など
+  action_detail TEXT,
+  old_value TEXT,
+  new_value TEXT,
+  user_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (application_id) REFERENCES subsidy_applications(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 助成金受給実績
+CREATE TABLE IF NOT EXISTS subsidy_receipts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL,
+  receipt_date DATE NOT NULL,
+  amount INTEGER NOT NULL,
+  payment_method TEXT, -- 振込、小切手など
+  bank_account TEXT,
+  tax_treatment TEXT, -- 課税、非課税など
+  accounting_period TEXT, -- 会計期間
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (application_id) REFERENCES subsidy_applications(id)
+);
+
+-- 助成金テンプレート（よく使う助成金の申請テンプレート）
+CREATE TABLE IF NOT EXISTS subsidy_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subsidy_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  checklist_items TEXT, -- JSON形式のチェックリスト
+  document_list TEXT, -- JSON形式の書類リスト
+  timeline_template TEXT, -- JSON形式のタイムライン
+  tips TEXT, -- 申請のコツやポイント
+  success_rate REAL, -- 成功率
+  created_by INTEGER,
+  is_public BOOLEAN DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (subsidy_id) REFERENCES subsidies(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- 助成金情報更新履歴
+CREATE TABLE IF NOT EXISTS subsidy_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subsidy_id INTEGER NOT NULL,
+  update_type TEXT NOT NULL, -- 要件変更、金額変更、期限変更など
+  update_content TEXT NOT NULL,
+  effective_date DATE,
+  source_url TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (subsidy_id) REFERENCES subsidies(id)
+);
+
+-- カレンダーイベント
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  client_id INTEGER,
+  task_id INTEGER,
+  project_id INTEGER,
+  title TEXT NOT NULL,
+  description TEXT,
+  start_datetime DATETIME NOT NULL,
+  end_datetime DATETIME NOT NULL,
+  location TEXT,
+  is_all_day BOOLEAN DEFAULT 0,
+  event_type TEXT DEFAULT 'appointment', -- appointment, deadline, meeting, reminder
+  reminder_minutes INTEGER DEFAULT 15,
+  google_event_id TEXT,
+  recurrence_rule TEXT, -- RRULE format for recurring events
+  status TEXT DEFAULT 'confirmed', -- confirmed, tentative, cancelled
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id),
+  FOREIGN KEY (client_id) REFERENCES clients (id),
+  FOREIGN KEY (task_id) REFERENCES tasks (id),
+  FOREIGN KEY (project_id) REFERENCES projects (id)
+);
+
+-- インデックス追加
+CREATE INDEX IF NOT EXISTS idx_tasks_client_id ON tasks(client_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee_id ON tasks(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_schedules_user_id ON schedules(user_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_start_datetime ON schedules(start_datetime);
+CREATE INDEX IF NOT EXISTS idx_subsidy_applications_client_id ON subsidy_applications(client_id);
+CREATE INDEX IF NOT EXISTS idx_subsidy_applications_status ON subsidy_applications(status);
+CREATE INDEX IF NOT EXISTS idx_subsidy_applications_submission_deadline ON subsidy_applications(submission_deadline);
+CREATE INDEX IF NOT EXISTS idx_subsidy_documents_application_id ON subsidy_documents(application_id);
+CREATE INDEX IF NOT EXISTS idx_subsidy_checklists_application_id ON subsidy_checklists(application_id);
+CREATE INDEX IF NOT EXISTS idx_subsidy_schedules_application_id ON subsidy_schedules(application_id);
+CREATE INDEX IF NOT EXISTS idx_subsidy_schedules_scheduled_date ON subsidy_schedules(scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_user_id ON calendar_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_start_datetime ON calendar_events(start_datetime);
