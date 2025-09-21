@@ -71,6 +71,35 @@ async function checkAuth(c: any, next: any) {
   await next()
 }
 
+// Public test endpoint for debugging (must be before auth middleware)
+app.get('/api/public/test', async (c) => {
+  try {
+    const testResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM tasks
+    `).first()
+    
+    const dateTestResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count 
+      FROM tasks 
+      WHERE DATE(created_at) BETWEEN '2025-09-01' AND '2025-09-30'
+    `).first()
+    
+    return c.json({
+      success: true,
+      basic_test: testResult,
+      date_test: dateTestResult,
+      message: 'Public test endpoint working'
+    })
+  } catch (error) {
+    console.error('Public test error:', error)
+    return c.json({ 
+      error: 'Public test failed', 
+      details: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : ''
+    }, 500)
+  }
+})
+
 // Apply auth middleware to protected routes
 app.use('/api/tasks/*', checkAuth)
 app.use('/api/clients/*', checkAuth)

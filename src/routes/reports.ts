@@ -145,16 +145,51 @@ reportsRouter.get('/client-activity', async (c) => {
   }
 })
 
+// Test endpoint for debugging (public for testing)
+reportsRouter.get('/test', async (c) => {
+  try {
+    // Test basic query
+    const testResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM tasks
+    `).first()
+    
+    // Test date range query
+    const dateTestResult = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count 
+      FROM tasks 
+      WHERE DATE(created_at) BETWEEN '2025-09-01' AND '2025-09-30'
+    `).first()
+    
+    return c.json({
+      success: true,
+      basic_test: testResult,
+      date_test: dateTestResult,
+      message: 'Test endpoint working'
+    })
+  } catch (error) {
+    console.error('Test error:', error)
+    return c.json({ 
+      error: 'Test failed', 
+      details: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : ''
+    }, 500)
+  }
+})
+
 // Get monthly report
 reportsRouter.get('/monthly', async (c) => {
   try {
     const year = c.req.query('year') || new Date().getFullYear()
     const month = c.req.query('month') || (new Date().getMonth() + 1)
     
+    console.log('Monthly report requested for:', { year, month })
+    
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
     // Get the last day of the month correctly
     const lastDay = new Date(Number(year), Number(month), 0).getDate()
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    
+    console.log('Date range:', { startDate, endDate })
     
     // Get summary statistics
     const summary = await c.env.DB.prepare(`
@@ -222,7 +257,15 @@ reportsRouter.get('/monthly', async (c) => {
     })
   } catch (error) {
     console.error('Error generating monthly report:', error)
-    return c.json({ error: 'Failed to generate monthly report' }, 500)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : ''
+    
+    return c.json({ 
+      error: 'Failed to generate monthly report',
+      details: errorMessage,
+      stack: errorStack,
+      query: { year, month }
+    }, 500)
   }
 })
 
