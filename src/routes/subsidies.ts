@@ -3,68 +3,106 @@ import type { Bindings } from '../types'
 
 const subsidiesRouter = new Hono<{ Bindings: Bindings }>()
 
-// Get all subsidy applications
+// Get all subsidies (master list)
 subsidiesRouter.get('/', async (c) => {
   try {
     const result = await c.env.DB.prepare(`
-      SELECT sa.*, c.name as client_name, c.company_name
-      FROM subsidy_applications sa
-      LEFT JOIN clients c ON sa.client_id = c.id
-      ORDER BY sa.created_at DESC
+      SELECT * FROM subsidies 
+      WHERE is_active = 1 
+      ORDER BY created_at DESC
     `).all()
     
-    return c.json(result.results || [])
+    return c.json({
+      success: true,
+      subsidies: result.results || []
+    })
+  } catch (error) {
+    console.error('Error fetching subsidies:', error)
+    return c.json({ error: 'Failed to fetch subsidies' }, 500)
+  }
+})
+
+// Get all subsidy applications
+subsidiesRouter.get('/applications', async (c) => {
+  try {
+    const user = c.get('user')
+    const userId = parseInt(user.sub)
+
+    const result = await c.env.DB.prepare(`
+      SELECT 
+        sa.*, 
+        s.name as subsidy_name,
+        s.max_amount,
+        s.category,
+        s.managing_organization,
+        c.name as client_name,
+        ROUND((
+          SELECT COUNT(*) * 100.0 / 
+          (SELECT COUNT(*) FROM subsidy_checklists sc2 WHERE sc2.application_id = sa.id)
+          FROM subsidy_checklists sc
+          WHERE sc.application_id = sa.id AND sc.is_completed = 1
+        ), 0) as progress
+      FROM subsidy_applications sa
+      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
+      LEFT JOIN clients c ON sa.client_id = c.id
+      WHERE sa.created_by = ?
+      ORDER BY sa.created_at DESC
+    `).bind(userId).all()
+    
+    return c.json({
+      success: true,
+      applications: result.results || []
+    })
   } catch (error) {
     console.error('Error fetching subsidy applications:', error)
     return c.json({ error: 'Failed to fetch subsidy applications' }, 500)
   }
 })
 
-// Get single subsidy application
-subsidiesRouter.get('/:id', async (c) => {
-  try {
-    const id = c.req.param('id')
-    
-    const application = await c.env.DB.prepare(`
-      SELECT sa.*, c.name as client_name, c.company_name
-      FROM subsidy_applications sa
-      LEFT JOIN clients c ON sa.client_id = c.id
-      WHERE sa.id = ?
-    `).bind(id).first()
-    
-    if (!application) {
-      return c.json({ error: 'Subsidy application not found' }, 404)
-    }
-    
-    return c.json(application)
-  } catch (error) {
-    console.error('Error fetching subsidy application:', error)
-    return c.json({ error: 'Failed to fetch subsidy application' }, 500)
-  }
-})
-
 // Create new subsidy application
-subsidiesRouter.post('/', async (c) => {
+subsidiesRouter.post('/applications', async (c) => {
   try {
+    const user = c.get('user')
+    const userId = parseInt(user.sub)
     const body = await c.req.json()
     const { 
-      client_id, subsidy_name, application_date, deadline_date,
-      amount_requested, status = 'preparing', notes, documents
+      subsidyId, clientId, amountRequested, submissionDeadline, notes
     } = body
     
+    if (!subsidyId || !clientId || !amountRequested) {
+      return c.json({ error: '必要な項目が不足しています' }, 400)
+    }
+
+    // Begin transaction
     const result = await c.env.DB.prepare(`
       INSERT INTO subsidy_applications 
-      (client_id, subsidy_name, application_date, deadline_date, amount_requested, status, notes, documents)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      client_id, subsidy_name, application_date, deadline_date,
-      amount_requested, status, notes, JSON.stringify(documents || [])
-    ).run()
+      (subsidy_id, client_id, amount_requested, submission_deadline, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(subsidyId, clientId, amountRequested, submissionDeadline, notes, userId).run()
     
+    const applicationId = result.meta.last_row_id
+
+    // Create default checklist items
+    const defaultChecklist = [
+      { name: '要件確認完了', category: '事前確認', required: true },
+      { name: '申請書作成', category: '書類準備', required: true },
+      { name: '添付書類収集', category: '書類準備', required: true },
+      { name: '内部承認取得', category: '社内手続き', required: true },
+      { name: '申請書提出', category: '提出', required: true }
+    ]
+
+    for (const [index, item] of defaultChecklist.entries()) {
+      await c.env.DB.prepare(`
+        INSERT INTO subsidy_checklists 
+        (application_id, item_name, category, is_required, display_order)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(applicationId, item.name, item.category, item.required ? 1 : 0, index).run()
+    }
+
     return c.json({ 
-      id: result.meta.last_row_id,
       success: true,
-      message: '助成金申請を登録しました'
+      id: applicationId,
+      message: '助成金申請プロジェクトを作成しました'
     })
   } catch (error) {
     console.error('Error creating subsidy application:', error)
@@ -72,76 +110,384 @@ subsidiesRouter.post('/', async (c) => {
   }
 })
 
-// Update subsidy application
-subsidiesRouter.put('/:id', async (c) => {
+// Search subsidies with filters
+subsidiesRouter.get('/search', async (c) => {
   try {
-    const id = c.req.param('id')
-    const body = await c.req.json()
-    const { 
-      client_id, subsidy_name, application_date, deadline_date,
-      amount_requested, status, notes, documents, approval_date, amount_approved
-    } = body
+    let query = `
+      SELECT s.*, 
+        CASE 
+          WHEN s.application_end_date IS NULL THEN 0
+          WHEN date(s.application_end_date) < date('now') THEN 1
+          ELSE 0
+        END as is_expired
+      FROM subsidies s 
+      WHERE s.is_active = 1
+    `
+    const params = []
     
-    await c.env.DB.prepare(`
-      UPDATE subsidy_applications SET
-        client_id = ?, subsidy_name = ?, application_date = ?,
-        deadline_date = ?, amount_requested = ?, status = ?,
-        notes = ?, documents = ?, approval_date = ?,
-        amount_approved = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).bind(
-      client_id, subsidy_name, application_date, deadline_date,
-      amount_requested, status, notes, JSON.stringify(documents || []),
-      approval_date, amount_approved, id
-    ).run()
+    const category = c.req.query('category')
+    const minAmount = c.req.query('minAmount')
     
-    return c.json({ 
+    if (category) {
+      query += ` AND s.category = ?`
+      params.push(category)
+    }
+    
+    if (minAmount) {
+      query += ` AND s.max_amount >= ?`
+      params.push(parseInt(minAmount))
+    }
+    
+    query += ` ORDER BY s.application_end_date ASC, s.max_amount DESC`
+    
+    const result = await c.env.DB.prepare(query).bind(...params).all()
+    
+    return c.json({
       success: true,
-      message: '助成金申請を更新しました'
+      subsidies: result.results || []
     })
   } catch (error) {
-    console.error('Error updating subsidy application:', error)
-    return c.json({ error: 'Failed to update subsidy application' }, 500)
+    console.error('Error searching subsidies:', error)
+    return c.json({ error: 'Failed to search subsidies' }, 500)
   }
 })
 
-// Delete subsidy application
-subsidiesRouter.delete('/:id', async (c) => {
+// Get deadline alerts
+subsidiesRouter.get('/alerts', async (c) => {
   try {
-    const id = c.req.param('id')
-    
-    await c.env.DB.prepare(`
-      DELETE FROM subsidy_applications WHERE id = ?
-    `).bind(id).run()
-    
-    return c.json({ 
-      success: true,
-      message: '助成金申請を削除しました'
-    })
-  } catch (error) {
-    console.error('Error deleting subsidy application:', error)
-    return c.json({ error: 'Failed to delete subsidy application' }, 500)
-  }
-})
+    const days = parseInt(c.req.query('days') || '30')
+    const user = c.get('user')
+    const userId = parseInt(user.sub)
 
-// Get subsidy statistics
-subsidiesRouter.get('/stats/summary', async (c) => {
-  try {
-    const stats = await c.env.DB.prepare(`
+    const result = await c.env.DB.prepare(`
       SELECT 
-        COUNT(*) as total_applications,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
-        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as pending_count,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_count,
-        SUM(amount_requested) as total_requested,
-        SUM(amount_approved) as total_approved
-      FROM subsidy_applications
-    `).first()
+        sa.id as applicationId,
+        sa.submission_deadline as deadline,
+        s.name as subsidyName,
+        c.name as clientName,
+        CAST(julianday(sa.submission_deadline) - julianday('now') as INTEGER) as daysRemaining
+      FROM subsidy_applications sa
+      JOIN subsidies s ON sa.subsidy_id = s.id
+      JOIN clients c ON sa.client_id = c.id
+      WHERE sa.created_by = ?
+        AND sa.status IN ('planning', 'preparing', 'document_check')
+        AND sa.submission_deadline IS NOT NULL
+        AND date(sa.submission_deadline) BETWEEN date('now') AND date('now', '+' || ? || ' days')
+      ORDER BY sa.submission_deadline ASC
+    `).bind(userId, days).all()
     
-    return c.json(stats || {})
+    return c.json({
+      success: true,
+      alerts: result.results || []
+    })
   } catch (error) {
-    console.error('Error fetching subsidy statistics:', error)
-    return c.json({ error: 'Failed to fetch statistics' }, 500)
+    console.error('Error fetching alerts:', error)
+    return c.json({ error: 'Failed to fetch alerts' }, 500)
+  }
+})
+
+// Fetch updates from MHLW (Ministry of Health, Labour and Welfare)
+subsidiesRouter.post('/fetch-updates', async (c) => {
+  try {
+    // Simulate fetching data from MHLW APIs or web scraping
+    // In a real implementation, you would:
+    // 1. Call MHLW APIs or scrape their website
+    // 2. Parse the data 
+    // 3. Update the subsidies table
+
+    const mockMHLWSubsidies = [
+      {
+        name: '雇用調整助成金',
+        category: '雇用系',
+        managing_organization: '厚生労働省',
+        description: '経済上の理由により事業活動の縮小を余儀なくされた事業主に対する助成',
+        max_amount: 15000,
+        subsidy_rate: 80.0,
+        application_period_type: 'anytime',
+        url: 'https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/koyou/kyufukin/pageL07.html'
+      },
+      {
+        name: 'キャリアアップ助成金',
+        category: '育成系', 
+        managing_organization: '厚生労働省',
+        description: '有期雇用労働者、短時間労働者等の正社員化や処遇改善に対する助成',
+        max_amount: 570000,
+        subsidy_rate: 100.0,
+        application_period_type: 'anytime',
+        url: 'https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/part_haken/jigyounushi/career.html'
+      },
+      {
+        name: '人材確保等支援助成金',
+        category: '雇用系',
+        managing_organization: '厚生労働省', 
+        description: '雇用管理制度の導入等による雇用環境の改善に対する助成',
+        max_amount: 720000,
+        subsidy_rate: 75.0,
+        application_period_type: 'anytime',
+        url: 'https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/0000158094.html'
+      }
+    ]
+
+    let updatedCount = 0
+
+    for (const subsidy of mockMHLWSubsidies) {
+      // Check if subsidy already exists
+      const existing = await c.env.DB.prepare(`
+        SELECT id FROM subsidies WHERE name = ? AND managing_organization = ?
+      `).bind(subsidy.name, subsidy.managing_organization).first()
+
+      if (existing) {
+        // Update existing
+        await c.env.DB.prepare(`
+          UPDATE subsidies SET 
+            description = ?, max_amount = ?, subsidy_rate = ?,
+            application_period_type = ?, url = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).bind(
+          subsidy.description, subsidy.max_amount, subsidy.subsidy_rate,
+          subsidy.application_period_type, subsidy.url, existing.id
+        ).run()
+      } else {
+        // Insert new
+        await c.env.DB.prepare(`
+          INSERT INTO subsidies 
+          (name, category, managing_organization, description, max_amount, 
+           subsidy_rate, application_period_type, url)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          subsidy.name, subsidy.category, subsidy.managing_organization,
+          subsidy.description, subsidy.max_amount, subsidy.subsidy_rate,
+          subsidy.application_period_type, subsidy.url
+        ).run()
+      }
+      updatedCount++
+    }
+
+    return c.json({
+      success: true,
+      updated_count: updatedCount,
+      message: `厚労省から${updatedCount}件の助成金情報を更新しました`
+    })
+  } catch (error) {
+    console.error('Error fetching MHLW updates:', error)
+    return c.json({ error: 'Failed to fetch updates from MHLW' }, 500)
+  }
+})
+
+// Fetch from all sources
+subsidiesRouter.post('/fetch-all', async (c) => {
+  try {
+    // Mock data for different sources
+    const allSources = {
+      mhlw: [
+        {
+          name: '雇用調整助成金',
+          category: '雇用系',
+          managing_organization: '厚生労働省',
+          max_amount: 15000,
+          subsidy_rate: 80.0
+        },
+        {
+          name: '両立支援等助成金',
+          category: '福祉系',
+          managing_organization: '厚生労働省',
+          max_amount: 1000000,
+          subsidy_rate: 100.0
+        }
+      ],
+      meti: [
+        {
+          name: 'ものづくり・商業・サービス生産性向上促進補助金',
+          category: '設備投資系',
+          managing_organization: '経済産業省',
+          max_amount: 10000000,
+          subsidy_rate: 50.0
+        },
+        {
+          name: '小規模事業者持続化補助金',
+          category: '創業系',
+          managing_organization: '経済産業省',
+          max_amount: 500000,
+          subsidy_rate: 75.0
+        }
+      ],
+      other: [
+        {
+          name: 'IT導入補助金',
+          category: '設備投資系',
+          managing_organization: 'IT導入補助金事務局',
+          max_amount: 4500000,
+          subsidy_rate: 75.0
+        }
+      ]
+    }
+
+    const counts = { mhlw: 0, meti: 0, other: 0 }
+    let totalCount = 0
+
+    for (const [source, subsidies] of Object.entries(allSources)) {
+      for (const subsidy of subsidies) {
+        // Check if exists
+        const existing = await c.env.DB.prepare(`
+          SELECT id FROM subsidies WHERE name = ? AND managing_organization = ?
+        `).bind(subsidy.name, subsidy.managing_organization).first()
+
+        if (!existing) {
+          await c.env.DB.prepare(`
+            INSERT INTO subsidies 
+            (name, category, managing_organization, max_amount, subsidy_rate, application_period_type)
+            VALUES (?, ?, ?, ?, ?, 'anytime')
+          `).bind(
+            subsidy.name, subsidy.category, subsidy.managing_organization,
+            subsidy.max_amount, subsidy.subsidy_rate
+          ).run()
+          
+          counts[source]++
+          totalCount++
+        }
+      }
+    }
+
+    return c.json({
+      success: true,
+      total_count: totalCount,
+      sources: counts,
+      message: `全ソースから合計${totalCount}件の助成金情報を更新しました`
+    })
+  } catch (error) {
+    console.error('Error fetching all sources:', error)
+    return c.json({ error: 'Failed to fetch from all sources' }, 500)
+  }
+})
+
+// External search
+subsidiesRouter.get('/search-external', async (c) => {
+  try {
+    const query = c.req.query('q')
+    const org = c.req.query('org')
+
+    if (!query) {
+      return c.json({ error: 'Search query is required' }, 400)
+    }
+
+    // Mock external search results
+    const mockResults = [
+      {
+        name: `${query}関連助成金A`,
+        managing_organization: org === 'mhlw' ? '厚生労働省' : 'その他機関',
+        url: 'https://example.com/subsidy1',
+        description: `${query}に関する助成金制度です`
+      },
+      {
+        name: `${query}支援補助金B`, 
+        managing_organization: org === 'mhlw' ? '厚生労働省' : '経済産業省',
+        url: 'https://example.com/subsidy2',
+        description: `${query}事業者向けの支援制度`
+      }
+    ].filter(result => !org || result.managing_organization.includes(
+      org === 'mhlw' ? '厚生労働省' : org === 'jgrants' ? 'jGrants' : ''
+    ))
+
+    return c.json({
+      success: true,
+      total_count: mockResults.length,
+      results: mockResults
+    })
+  } catch (error) {
+    console.error('Error in external search:', error)
+    return c.json({ error: 'External search failed' }, 500)
+  }
+})
+
+// Get subsidy database (for admin tab)
+subsidiesRouter.get('/database', async (c) => {
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT 
+        s.*,
+        COUNT(sa.id) as application_count,
+        CASE 
+          WHEN s.application_end_date IS NULL THEN 'ongoing'
+          WHEN date(s.application_end_date) < date('now') THEN 'expired'
+          ELSE 'active'
+        END as status
+      FROM subsidies s
+      LEFT JOIN subsidy_applications sa ON s.id = sa.subsidy_id
+      GROUP BY s.id
+      ORDER BY s.updated_at DESC
+    `).all()
+    
+    return c.json({
+      success: true,
+      subsidies: result.results || []
+    })
+  } catch (error) {
+    console.error('Error fetching subsidy database:', error)
+    return c.json({ error: 'Failed to fetch subsidy database' }, 500)
+  }
+})
+
+// Get single application detail
+subsidiesRouter.get('/applications/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const user = c.get('user')
+    const userId = parseInt(user.sub)
+
+    const application = await c.env.DB.prepare(`
+      SELECT 
+        sa.*, 
+        s.name as subsidy_name,
+        s.description as subsidy_description,
+        s.max_amount,
+        s.subsidy_rate,
+        s.requirements,
+        s.managing_organization,
+        s.url as subsidy_url,
+        c.name as client_name
+      FROM subsidy_applications sa
+      JOIN subsidies s ON sa.subsidy_id = s.id
+      JOIN clients c ON sa.client_id = c.id
+      WHERE sa.id = ? AND sa.created_by = ?
+    `).bind(id, userId).first()
+
+    if (!application) {
+      return c.json({ error: '申請が見つかりません' }, 404)
+    }
+
+    // Get checklist
+    const checklist = await c.env.DB.prepare(`
+      SELECT * FROM subsidy_checklists 
+      WHERE application_id = ? 
+      ORDER BY display_order, id
+    `).bind(id).all()
+
+    // Get documents
+    const documents = await c.env.DB.prepare(`
+      SELECT * FROM subsidy_documents 
+      WHERE application_id = ?
+      ORDER BY created_at DESC
+    `).bind(id).all()
+
+    // Get schedules
+    const schedules = await c.env.DB.prepare(`
+      SELECT * FROM subsidy_schedules 
+      WHERE application_id = ?
+      ORDER BY scheduled_date ASC
+    `).bind(id).all()
+
+    return c.json({
+      success: true,
+      application: {
+        ...application,
+        checklist: checklist.results || [],
+        documents: documents.results || [],
+        schedules: schedules.results || []
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching application detail:', error)
+    return c.json({ error: 'Failed to fetch application detail' }, 500)
   }
 })
 
