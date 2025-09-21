@@ -25,37 +25,73 @@ subsidiesRouter.get('/', async (c) => {
 // Get all subsidy applications
 subsidiesRouter.get('/applications', async (c) => {
   try {
+    // Debug: Check if user exists
     const user = c.get('user')
-    const userId = parseInt(user.sub)
+    if (!user) {
+      console.error('No user found in context')
+      return c.json({ error: 'User not authenticated', debug: 'No user in context' }, 401)
+    }
 
+    // Debug: Check if DB exists
+    if (!c.env.DB) {
+      console.error('Database not available')
+      return c.json({ error: 'Database not configured', debug: 'DB binding missing' }, 500)
+    }
+
+    const userId = parseInt(user.sub)
+    if (isNaN(userId)) {
+      console.error('Invalid user ID:', user.sub)
+      return c.json({ error: 'Invalid user ID', debug: `user.sub: ${user.sub}` }, 400)
+    }
+
+    // First, check if tables exist
+    try {
+      const tableCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='subsidy_applications'
+      `).first()
+      
+      if (!tableCheck) {
+        console.error('subsidy_applications table does not exist')
+        return c.json({ 
+          error: 'Database not initialized', 
+          debug: 'subsidy_applications table missing',
+          success: true,
+          applications: []
+        })
+      }
+    } catch (tableError) {
+      console.error('Error checking table existence:', tableError)
+      return c.json({ 
+        error: 'Database check failed', 
+        debug: tableError.message,
+        success: true,
+        applications: []
+      })
+    }
+
+    // Try simplified query first
     const result = await c.env.DB.prepare(`
-      SELECT 
-        sa.*, 
-        s.name as subsidy_name,
-        s.max_amount,
-        s.category,
-        s.managing_organization,
-        c.name as client_name,
-        ROUND((
-          SELECT COUNT(*) * 100.0 / 
-          (SELECT COUNT(*) FROM subsidy_checklists sc2 WHERE sc2.application_id = sa.id)
-          FROM subsidy_checklists sc
-          WHERE sc.application_id = sa.id AND sc.is_completed = 1
-        ), 0) as progress
-      FROM subsidy_applications sa
-      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
-      LEFT JOIN clients c ON sa.client_id = c.id
-      WHERE sa.created_by = ?
-      ORDER BY sa.created_at DESC
+      SELECT * FROM subsidy_applications 
+      WHERE created_by = ?
+      ORDER BY created_at DESC
     `).bind(userId).all()
     
     return c.json({
       success: true,
-      applications: result.results || []
+      applications: result.results || [],
+      debug: {
+        userId,
+        tableExists: true,
+        resultCount: result.results?.length || 0
+      }
     })
   } catch (error) {
     console.error('Error fetching subsidy applications:', error)
-    return c.json({ error: 'Failed to fetch subsidy applications' }, 500)
+    return c.json({ 
+      error: 'Failed to fetch subsidy applications', 
+      debug: error.message,
+      stack: error.stack
+    }, 500)
   }
 })
 
@@ -189,11 +225,46 @@ subsidiesRouter.get('/alerts', async (c) => {
 // Fetch updates from MHLW (Ministry of Health, Labour and Welfare)
 subsidiesRouter.post('/fetch-updates', async (c) => {
   try {
-    // Simulate fetching data from MHLW APIs or web scraping
-    // In a real implementation, you would:
-    // 1. Call MHLW APIs or scrape their website
-    // 2. Parse the data 
-    // 3. Update the subsidies table
+    // Debug: Check if DB exists
+    if (!c.env.DB) {
+      console.error('Database not available for fetch-updates')
+      return c.json({ error: 'Database not configured', debug: 'DB binding missing' }, 500)
+    }
+
+    // Check if subsidies table exists
+    try {
+      const tableCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='subsidies'
+      `).first()
+      
+      if (!tableCheck) {
+        console.error('subsidies table does not exist')
+        // Create the table if it doesn't exist
+        await c.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS subsidies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            managing_organization TEXT NOT NULL,
+            description TEXT,
+            max_amount INTEGER,
+            subsidy_rate REAL,
+            application_period_type TEXT,
+            url TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run()
+        console.log('Created subsidies table')
+      }
+    } catch (tableError) {
+      console.error('Error checking/creating subsidies table:', tableError)
+      return c.json({ 
+        error: 'Database initialization failed', 
+        debug: tableError.message 
+      }, 500)
+    }
 
     const mockMHLWSubsidies = [
       {
@@ -231,46 +302,56 @@ subsidiesRouter.post('/fetch-updates', async (c) => {
     let updatedCount = 0
 
     for (const subsidy of mockMHLWSubsidies) {
-      // Check if subsidy already exists
-      const existing = await c.env.DB.prepare(`
-        SELECT id FROM subsidies WHERE name = ? AND managing_organization = ?
-      `).bind(subsidy.name, subsidy.managing_organization).first()
+      try {
+        // Check if subsidy already exists
+        const existing = await c.env.DB.prepare(`
+          SELECT id FROM subsidies WHERE name = ? AND managing_organization = ?
+        `).bind(subsidy.name, subsidy.managing_organization).first()
 
-      if (existing) {
-        // Update existing
-        await c.env.DB.prepare(`
-          UPDATE subsidies SET 
-            description = ?, max_amount = ?, subsidy_rate = ?,
-            application_period_type = ?, url = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).bind(
-          subsidy.description, subsidy.max_amount, subsidy.subsidy_rate,
-          subsidy.application_period_type, subsidy.url, existing.id
-        ).run()
-      } else {
-        // Insert new
-        await c.env.DB.prepare(`
-          INSERT INTO subsidies 
-          (name, category, managing_organization, description, max_amount, 
-           subsidy_rate, application_period_type, url)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          subsidy.name, subsidy.category, subsidy.managing_organization,
-          subsidy.description, subsidy.max_amount, subsidy.subsidy_rate,
-          subsidy.application_period_type, subsidy.url
-        ).run()
+        if (existing) {
+          // Update existing
+          await c.env.DB.prepare(`
+            UPDATE subsidies SET 
+              description = ?, max_amount = ?, subsidy_rate = ?,
+              application_period_type = ?, url = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(
+            subsidy.description, subsidy.max_amount, subsidy.subsidy_rate,
+            subsidy.application_period_type, subsidy.url, existing.id
+          ).run()
+        } else {
+          // Insert new
+          await c.env.DB.prepare(`
+            INSERT INTO subsidies 
+            (name, category, managing_organization, description, max_amount, 
+             subsidy_rate, application_period_type, url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            subsidy.name, subsidy.category, subsidy.managing_organization,
+            subsidy.description, subsidy.max_amount, subsidy.subsidy_rate,
+            subsidy.application_period_type, subsidy.url
+          ).run()
+        }
+        updatedCount++
+      } catch (insertError) {
+        console.error(`Error processing subsidy ${subsidy.name}:`, insertError)
+        // Continue with next subsidy
       }
-      updatedCount++
     }
 
     return c.json({
       success: true,
       updated_count: updatedCount,
-      message: `厚労省から${updatedCount}件の助成金情報を更新しました`
+      message: `厚労省から${updatedCount}件の助成金情報を更新しました`,
+      debug: { tableExists: true, processedCount: mockMHLWSubsidies.length }
     })
   } catch (error) {
     console.error('Error fetching MHLW updates:', error)
-    return c.json({ error: 'Failed to fetch updates from MHLW' }, 500)
+    return c.json({ 
+      error: 'Failed to fetch updates from MHLW', 
+      debug: error.message,
+      stack: error.stack 
+    }, 500)
   }
 })
 

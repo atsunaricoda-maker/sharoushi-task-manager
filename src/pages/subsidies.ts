@@ -399,11 +399,33 @@ export function getSubsidiesPage(userName: string): string {
             async function loadApplications() {
                 try {
                     const response = await axios.get('/api/subsidies/applications');
-                    applications = response.data.applications;
+                    applications = response.data.applications || [];
                     displayApplications(applications);
                     updateStatistics(applications);
+                    
+                    // デバッグ情報があれば表示
+                    if (response.data.debug) {
+                        console.log('Applications debug:', response.data.debug);
+                    }
                 } catch (error) {
                     console.error('Failed to load applications:', error);
+                    
+                    // エラー詳細を画面に表示
+                    const container = document.getElementById('applicationsList');
+                    const errorMsg = error.response?.data?.debug || error.response?.data?.message || error.message;
+                    container.innerHTML = \`
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                            <div class="text-red-800 font-medium">申請データの読み込みエラー</div>
+                            <div class="text-red-600 text-sm mt-2">
+                                エラー: \${errorMsg}<br>
+                                ステータス: \${error.response?.status || 'unknown'}<br>
+                                URL: /api/subsidies/applications
+                            </div>
+                        </div>
+                    \`;
+                    
+                    // 統計を0で更新
+                    updateStatistics([]);
                 }
             }
             
@@ -736,6 +758,7 @@ export function getSubsidiesPage(userName: string): string {
                     statusEl.innerHTML = \`
                         <i class="fas fa-check-circle text-green-600"></i> 
                         更新完了：\${response.data.updated_count}件
+                        \${response.data.debug ? \`<div class="text-xs mt-1">デバッグ: \${JSON.stringify(response.data.debug)}</div>\` : ''}
                     \`;
                     statusEl.className = 'mt-4 text-sm text-green-600';
                     
@@ -745,9 +768,16 @@ export function getSubsidiesPage(userName: string): string {
                     // リストを更新
                     loadSubsidyDatabase();
                 } catch (error) {
+                    console.error('MHLW fetch error:', error);
+                    const errorMsg = error.response?.data?.debug || error.response?.data?.message || error.message || 'ネットワークエラー';
                     statusEl.innerHTML = \`
                         <i class="fas fa-exclamation-circle text-red-600"></i> 
-                        エラー：\${error.response?.data?.message || 'ネットワークエラー'}
+                        エラー：\${errorMsg}
+                        <div class="text-xs mt-1">
+                            ステータス: \${error.response?.status || 'unknown'}<br>
+                            URL: /api/subsidies/fetch-updates<br>
+                            時刻: \${new Date().toLocaleTimeString()}
+                        </div>
                     \`;
                     statusEl.className = 'mt-4 text-sm text-red-600';
                 }
@@ -766,9 +796,9 @@ export function getSubsidiesPage(userName: string): string {
                         <i class="fas fa-check-circle text-green-600"></i> 
                         更新完了：合計\${response.data.total_count}件
                         <div class="mt-2 text-xs">
-                            厚労省: \${response.data.sources.mhlw}件 | 
-                            経産省: \${response.data.sources.meti}件 | 
-                            その他: \${response.data.sources.other}件
+                            厚労省: \${response.data.sources?.mhlw || 0}件 | 
+                            経産省: \${response.data.sources?.meti || 0}件 | 
+                            その他: \${response.data.sources?.other || 0}件
                         </div>
                     \`;
                     statusEl.className = 'mt-4 text-sm text-green-600';
@@ -779,9 +809,16 @@ export function getSubsidiesPage(userName: string): string {
                     // リストを更新
                     loadSubsidyDatabase();
                 } catch (error) {
+                    console.error('All sources fetch error:', error);
+                    const errorMsg = error.response?.data?.debug || error.response?.data?.message || error.message || 'ネットワークエラー';
                     statusEl.innerHTML = \`
                         <i class="fas fa-exclamation-circle text-red-600"></i> 
-                        エラー：\${error.response?.data?.message || 'ネットワークエラー'}
+                        エラー：\${errorMsg}
+                        <div class="text-xs mt-1">
+                            ステータス: \${error.response?.status || 'unknown'}<br>
+                            URL: /api/subsidies/fetch-all<br>
+                            時刻: \${new Date().toLocaleTimeString()}
+                        </div>
                     \`;
                     statusEl.className = 'mt-4 text-sm text-red-600';
                 }
