@@ -1013,6 +1013,7 @@ export function getSubsidiesPage(userName: string): string {
                                             \${app.checklist.map(item => \`
                                                 <div class="flex items-center">
                                                     <input type="checkbox" \${item.is_completed ? 'checked' : ''} 
+                                                        data-checklist-id="\${item.id}"
                                                         class="rounded border-gray-300 text-blue-600 mr-3">
                                                     <span class="\${item.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}">\${escapeHtml(item.item_name)}</span>
                                                     \${item.is_required ? '<span class="ml-2 text-red-500 text-xs">必須</span>' : ''}
@@ -1043,6 +1044,21 @@ export function getSubsidiesPage(userName: string): string {
                                             </a>
                                         \` : ''}
                                         
+                                        <button onclick="saveApplicationProgress(\${app.id})" 
+                                            class="block w-full px-4 py-2 bg-green-600 text-white text-center rounded-md hover:bg-green-700 mb-3">
+                                            <i class="fas fa-save mr-2"></i>進捗を保存
+                                        </button>
+                                        
+                                        <button onclick="showUploadModal(\${app.id})" 
+                                            class="block w-full px-4 py-2 bg-purple-600 text-white text-center rounded-md hover:bg-purple-700 mb-3">
+                                            <i class="fas fa-upload mr-2"></i>書類アップロード
+                                        </button>
+                                        
+                                        <button onclick="deleteApplication(\${app.id})" 
+                                            class="block w-full px-4 py-2 bg-red-600 text-white text-center rounded-md hover:bg-red-700 mb-3">
+                                            <i class="fas fa-trash mr-2"></i>申請を破棄
+                                        </button>
+                                        
                                         <button onclick="closeApplicationDetailModal()" 
                                             class="block w-full px-4 py-2 bg-gray-600 text-white text-center rounded-md hover:bg-gray-700">
                                             閉じる
@@ -1063,6 +1079,116 @@ export function getSubsidiesPage(userName: string): string {
             // 申請詳細モーダルを閉じる
             function closeApplicationDetailModal() {
                 document.getElementById('applicationDetailModal').classList.add('hidden');
+            }
+            
+            // 進捗保存
+            async function saveApplicationProgress(applicationId) {
+                try {
+                    const checkboxes = document.querySelectorAll('#applicationDetailModal input[type="checkbox"]');
+                    const checklist = Array.from(checkboxes).map(cb => ({
+                        id: cb.dataset.checklistId,
+                        is_completed: cb.checked
+                    }));
+                    
+                    const response = await axios.put(\`/api/subsidies/applications/\${applicationId}\`, {
+                        checklist
+                    });
+                    
+                    if (response.data.success) {
+                        alert('進捗を保存しました');
+                        // Refresh the detail view
+                        showApplicationDetail(applicationId);
+                        // Refresh the application list
+                        loadApplications();
+                    }
+                } catch (error) {
+                    console.error('Progress save error:', error);
+                    alert('進捗の保存に失敗しました');
+                }
+            }
+            
+            // 申請削除
+            async function deleteApplication(applicationId) {
+                if (!confirm('この申請を削除しますか？この操作は取り消せません。')) {
+                    return;
+                }
+                
+                try {
+                    const response = await axios.delete(\`/api/subsidies/applications/\${applicationId}\`);
+                    
+                    if (response.data.success) {
+                        alert('申請を削除しました');
+                        closeApplicationDetailModal();
+                        loadApplications(); // Refresh the list
+                    }
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    alert('申請の削除に失敗しました');
+                }
+            }
+            
+            // アップロードモーダル表示
+            function showUploadModal(applicationId) {
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                modal.innerHTML = \`
+                    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                        <h3 class="text-lg font-semibold mb-4">書類アップロード</h3>
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">書類種別</label>
+                                <select name="document_type" class="w-full border rounded-md px-3 py-2">
+                                    <option value="申請書">申請書</option>
+                                    <option value="添付書類">添付書類</option>
+                                    <option value="証明書">証明書</option>
+                                    <option value="写真">写真</option>
+                                    <option value="その他">その他</option>
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">書類名</label>
+                                <input type="text" name="document_name" class="w-full border rounded-md px-3 py-2" placeholder="例：履歴事項全部証明書">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium mb-2">ファイル</label>
+                                <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" 
+                                    class="w-full border rounded-md px-3 py-2" required>
+                            </div>
+                            <div class="flex gap-3">
+                                <button type="button" onclick="this.closest('.fixed').remove()" 
+                                    class="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                                    キャンセル
+                                </button>
+                                <button type="submit" 
+                                    class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                    アップロード
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                \`;
+                
+                document.body.appendChild(modal);
+                
+                // Handle upload
+                modal.querySelector('#uploadForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.target);
+                    
+                    try {
+                        const response = await axios.post(\`/api/subsidies/applications/\${applicationId}/documents\`, formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        
+                        if (response.data.success) {
+                            alert('ファイルをアップロードしました');
+                            modal.remove();
+                        }
+                    } catch (error) {
+                        console.error('Upload error:', error);
+                        alert('アップロードに失敗しました');
+                    }
+                });
             }
 
             // 助成金登録モーダル表示（未実装）

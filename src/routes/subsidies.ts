@@ -306,6 +306,116 @@ subsidiesRouter.get('/applications/:id', async (c) => {
   }
 })
 
+// Update subsidy application
+subsidiesRouter.put('/applications/:id', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    const body = await c.req.json()
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    const { status, notes, checklist } = body
+    
+    // Update main application
+    if (status || notes !== undefined) {
+      await c.env.DB.prepare(`
+        UPDATE subsidy_applications 
+        SET status = COALESCE(?, status), 
+            notes = COALESCE(?, notes),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND created_by = ?
+      `).bind(status, notes, applicationId, userId).run()
+    }
+    
+    // Update checklist items
+    if (checklist && Array.isArray(checklist)) {
+      for (const item of checklist) {
+        try {
+          await c.env.DB.prepare(`
+            UPDATE subsidy_checklists 
+            SET is_completed = ?,
+                completed_by = ?,
+                completed_at = CASE 
+                  WHEN ? = 1 THEN CURRENT_TIMESTAMP 
+                  ELSE NULL 
+                END
+            WHERE id = ?
+          `).bind(item.is_completed ? 1 : 0, userId, item.is_completed ? 1 : 0, item.id).run()
+        } catch (checklistError) {
+          console.log('Checklist update error for item', item.id, checklistError)
+        }
+      }
+    }
+    
+    return c.json({ success: true, message: '申請情報を更新しました' })
+  } catch (error) {
+    console.error('Error updating application:', error)
+    return c.json({ 
+      error: 'Failed to update application',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Delete subsidy application
+subsidiesRouter.delete('/applications/:id', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Check if application exists and belongs to user
+    const application = await c.env.DB.prepare(`
+      SELECT id FROM subsidy_applications 
+      WHERE id = ? AND created_by = ?
+    `).bind(applicationId, userId).first()
+    
+    if (!application) {
+      return c.json({ error: 'Application not found' }, 404)
+    }
+    
+    // Delete related checklist items first
+    try {
+      await c.env.DB.prepare(`
+        DELETE FROM subsidy_checklists WHERE application_id = ?
+      `).bind(applicationId).run()
+    } catch (checklistError) {
+      console.log('No checklist items to delete')
+    }
+    
+    // Delete related documents
+    try {
+      await c.env.DB.prepare(`
+        DELETE FROM subsidy_documents WHERE application_id = ?
+      `).bind(applicationId).run()
+    } catch (documentsError) {
+      console.log('No documents to delete')
+    }
+    
+    // Delete main application
+    await c.env.DB.prepare(`
+      DELETE FROM subsidy_applications WHERE id = ?
+    `).bind(applicationId).run()
+    
+    return c.json({ success: true, message: '申請を削除しました' })
+  } catch (error) {
+    console.error('Error deleting application:', error)
+    return c.json({ 
+      error: 'Failed to delete application',
+      debug: error.message 
+    }, 500)
+  }
+})
+
 // Search subsidies with filters
 subsidiesRouter.get('/search', async (c) => {
   try {
@@ -615,6 +725,133 @@ const fetchAllSources = async (c) => {
 // Support both GET and POST for fetch-all
 subsidiesRouter.post('/fetch-all', fetchAllSources)
 subsidiesRouter.get('/fetch-all', fetchAllSources)
+
+// Upload document for application
+subsidiesRouter.post('/applications/:id/documents', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Check if application belongs to user
+    const application = await c.env.DB.prepare(`
+      SELECT id FROM subsidy_applications 
+      WHERE id = ? AND created_by = ?
+    `).bind(applicationId, userId).first()
+    
+    if (!application) {
+      return c.json({ error: 'Application not found' }, 404)
+    }
+    
+    const formData = await c.req.formData()
+    const file = formData.get('file')
+    const documentName = formData.get('document_name') || file?.name
+    const documentType = formData.get('document_type') || '申請書類'
+    
+    if (!file) {
+      return c.json({ error: 'No file provided' }, 400)
+    }
+    
+    // For now, we'll store file info in database
+    const fileSize = file.size
+    const fileName = file.name
+    const fileType = file.type
+    
+    // Store document info in database
+    try {
+      // Create subsidy_documents table if it doesn't exist
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS subsidy_documents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          application_id INTEGER NOT NULL,
+          document_name TEXT NOT NULL,
+          document_type TEXT NOT NULL,
+          file_name TEXT,
+          file_size INTEGER,
+          file_type TEXT,
+          status TEXT DEFAULT 'uploaded',
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          notes TEXT,
+          FOREIGN KEY (application_id) REFERENCES subsidy_applications(id)
+        )
+      `).run()
+    } catch (tableError) {
+      console.log('Documents table may already exist')
+    }
+    
+    const result = await c.env.DB.prepare(`
+      INSERT INTO subsidy_documents 
+      (application_id, document_name, document_type, file_name, file_size, file_type)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(applicationId, documentName, documentType, fileName, fileSize, fileType).run()
+    
+    return c.json({ 
+      success: true, 
+      message: 'ファイルをアップロードしました',
+      document_id: result.meta.last_row_id 
+    })
+  } catch (error) {
+    console.error('Error uploading document:', error)
+    return c.json({ 
+      error: 'Failed to upload document',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Get documents for application
+subsidiesRouter.get('/applications/:id/documents', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Check if application belongs to user
+    const application = await c.env.DB.prepare(`
+      SELECT id FROM subsidy_applications 
+      WHERE id = ? AND created_by = ?
+    `).bind(applicationId, userId).first()
+    
+    if (!application) {
+      return c.json({ error: 'Application not found' }, 404)
+    }
+    
+    // Get documents
+    try {
+      const result = await c.env.DB.prepare(`
+        SELECT * FROM subsidy_documents 
+        WHERE application_id = ? 
+        ORDER BY uploaded_at DESC
+      `).bind(applicationId).all()
+      
+      return c.json({
+        success: true,
+        documents: result.results || []
+      })
+    } catch (documentsError) {
+      return c.json({
+        success: true,
+        documents: []
+      })
+    }
+  } catch (error) {
+    console.error('Error fetching documents:', error)
+    return c.json({ 
+      error: 'Failed to fetch documents',
+      debug: error.message 
+    }, 500)
+  }
+})
 
 // External search
 subsidiesRouter.get('/search-external', async (c) => {
