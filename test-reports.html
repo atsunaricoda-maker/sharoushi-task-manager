@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Report API Test</h1>
+    <button onclick="testReport()">Test Monthly Report</button>
+    <div id="result"></div>
+
+    <script>
+        async function testReport() {
+            try {
+                console.log('Testing report generation...');
+                const res = await axios.get('https://sharoushi-task-manager.pages.dev/api/reports/monthly?year=2024&month=12');
+                console.log('API response:', res.status, res.data);
+                
+                const data = res.data;
+                
+                // Test the same logic as in our fixed frontend
+                const totalTasks = data.summary.total_tasks || 0;
+                const completedTasks = data.summary.completed_tasks || 0;
+                
+                const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) + '%' : '0%';
+                
+                document.getElementById('result').innerHTML = `
+                    <h2>Report Data:</h2>
+                    <p>Total Tasks: ${totalTasks}</p>
+                    <p>Completed Tasks: ${completedTasks}</p>
+                    <p>Completion Rate: ${completionRate}</p>
+                    <p>By Client: ${JSON.stringify(data.byClient || [])}</p>
+                    <p>By Assignee: ${JSON.stringify(data.byAssignee || [])}</p>
+                    <p style="color: green;"><strong>SUCCESS: Report generated successfully!</strong></p>
+                `;
+                
+            } catch (error) {
+                console.error('Failed to generate report:', error);
+                console.error('Error details:', error.response?.data || error.message);
+                
+                let errorMessage = 'レポート生成に失敗しました';
+                if (error.response?.status === 401) {
+                    errorMessage = 'ログインが必要です';
+                } else if (error.response?.status === 500) {
+                    errorMessage = 'サーバーエラーが発生しました';
+                } else if (error.response?.data?.message) {
+                    errorMessage = error.response.data.message;
+                }
+                
+                document.getElementById('result').innerHTML = `
+                    <p style="color: red;"><strong>ERROR: ${errorMessage}</strong></p>
+                    <p>Status: ${error.response?.status || 'Unknown'}</p>
+                    <p>Details: ${error.response?.data || error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
