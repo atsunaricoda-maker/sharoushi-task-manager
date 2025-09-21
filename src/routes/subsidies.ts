@@ -138,11 +138,18 @@ subsidiesRouter.get('/applications', async (c) => {
       })
     }
 
-    // Try simplified query first
+    // Query with JOIN to get client and subsidy information
     const result = await c.env.DB.prepare(`
-      SELECT * FROM subsidy_applications 
-      WHERE created_by = ?
-      ORDER BY created_at DESC
+      SELECT 
+        sa.*,
+        c.name as client_name,
+        s.name as subsidy_name,
+        s.max_amount as subsidy_max_amount
+      FROM subsidy_applications sa
+      LEFT JOIN clients c ON sa.client_id = c.id
+      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
+      WHERE sa.created_by = ?
+      ORDER BY sa.created_at DESC
     `).bind(userId).all()
     
     return c.json({
@@ -167,14 +174,27 @@ subsidiesRouter.get('/applications', async (c) => {
 // Create new subsidy application
 subsidiesRouter.post('/applications', async (c) => {
   try {
+    console.log('Creating new subsidy application')
+    
     const user = c.get('user')
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
     const userId = parseInt(user.sub)
+    if (isNaN(userId)) {
+      return c.json({ error: 'Invalid user ID' }, 400)
+    }
+    
     const body = await c.req.json()
+    console.log('Request body:', body)
+    
     const { 
       subsidyId, clientId, amountRequested, submissionDeadline, notes
     } = body
     
     if (!subsidyId || !clientId || !amountRequested) {
+      console.log('Missing required fields:', { subsidyId, clientId, amountRequested })
       return c.json({ error: '必要な項目が不足しています' }, 400)
     }
 
@@ -196,12 +216,19 @@ subsidiesRouter.post('/applications', async (c) => {
       { name: '申請書提出', category: '提出', required: true }
     ]
 
-    for (const [index, item] of defaultChecklist.entries()) {
-      await c.env.DB.prepare(`
-        INSERT INTO subsidy_checklists 
-        (application_id, item_name, category, is_required, display_order)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(applicationId, item.name, item.category, item.required ? 1 : 0, index).run()
+    // Create default checklist items (with error handling)
+    try {
+      for (const [index, item] of defaultChecklist.entries()) {
+        await c.env.DB.prepare(`
+          INSERT INTO subsidy_checklists 
+          (application_id, item_name, category, is_required, display_order)
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(applicationId, item.name, item.category, item.required ? 1 : 0, index).run()
+      }
+      console.log('Checklist items created successfully')
+    } catch (checklistError) {
+      console.error('Failed to create checklist items:', checklistError)
+      // Continue without checklist if table doesn't exist
     }
 
     return c.json({ 
@@ -211,7 +238,11 @@ subsidiesRouter.post('/applications', async (c) => {
     })
   } catch (error) {
     console.error('Error creating subsidy application:', error)
-    return c.json({ error: 'Failed to create subsidy application' }, 500)
+    return c.json({ 
+      error: 'Failed to create subsidy application',
+      debug: error.message,
+      stack: error.stack 
+    }, 500)
   }
 })
 
