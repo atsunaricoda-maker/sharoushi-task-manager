@@ -23,6 +23,7 @@ import { getProjectsPage } from './pages/projects'
 import { getSubsidiesPage } from './pages/subsidies'
 import { getAdminDashboardPage } from './pages/admin-dashboard'
 import { getSchedulePage } from './pages/schedule'
+import { getTasksPage } from './pages/tasks'
 
 // TypeScript types for Cloudflare bindings
 type Bindings = {
@@ -421,6 +422,30 @@ app.get('/api/tasks', async (c) => {
     return c.json({ tasks: result.results })
   } catch (error) {
     return c.json({ error: 'Failed to fetch tasks' }, 500)
+  }
+})
+
+app.get('/api/tasks/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const result = await c.env.DB.prepare(`
+      SELECT 
+        t.*,
+        u.name as assignee_name,
+        c.name as client_name
+      FROM tasks t
+      LEFT JOIN users u ON t.assignee_id = u.id
+      LEFT JOIN clients c ON t.client_id = c.id
+      WHERE t.id = ?
+    `).bind(id).first()
+    
+    if (!result) {
+      return c.json({ error: 'Task not found' }, 404)
+    }
+    
+    return c.json(result)
+  } catch (error) {
+    return c.json({ error: 'Failed to fetch task' }, 500)
   }
 })
 
@@ -852,6 +877,10 @@ app.get('/', async (c) => {
                 機能一覧
             </h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <a href="/tasks" class="flex items-center p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors">
+                    <i class="fas fa-tasks text-teal-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">タスク管理</span>
+                </a>
                 <a href="/clients" class="flex items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                     <i class="fas fa-building text-blue-600 text-xl mr-3"></i>
                     <span class="text-gray-900 font-medium">顧問先管理</span>
@@ -1221,6 +1250,24 @@ app.get('/', async (c) => {
 </body>
 </html>
   `)
+})
+
+// Tasks page
+app.get('/tasks', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getTasksPage(payload))
 })
 
 // Clients page
