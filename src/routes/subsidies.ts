@@ -355,9 +355,16 @@ subsidiesRouter.post('/fetch-updates', async (c) => {
   }
 })
 
-// Fetch from all sources
-subsidiesRouter.post('/fetch-all', async (c) => {
+// Fetch from all sources (support both GET and POST)
+const fetchAllSources = async (c) => {
   try {
+    console.log('fetch-all endpoint called')
+    
+    // Debug: Check if DB exists
+    if (!c.env.DB) {
+      console.error('Database not available in fetch-all')
+      return c.json({ error: 'Database not configured', debug: 'DB binding missing' }, 500)
+    }
     // Mock data for different sources
     const allSources = {
       mhlw: [
@@ -437,9 +444,17 @@ subsidiesRouter.post('/fetch-all', async (c) => {
     })
   } catch (error) {
     console.error('Error fetching all sources:', error)
-    return c.json({ error: 'Failed to fetch from all sources' }, 500)
+    return c.json({ 
+      error: 'Failed to fetch from all sources',
+      debug: error.message,
+      stack: error.stack 
+    }, 500)
   }
-})
+}
+
+// Support both GET and POST for fetch-all
+subsidiesRouter.post('/fetch-all', fetchAllSources)
+subsidiesRouter.get('/fetch-all', fetchAllSources)
 
 // External search
 subsidiesRouter.get('/search-external', async (c) => {
