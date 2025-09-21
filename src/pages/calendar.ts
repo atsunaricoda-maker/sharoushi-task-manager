@@ -236,18 +236,17 @@ export function getCalendarPage(userName: string): string {
                         try {
                             const response = await axios.get('/api/calendar/events', {
                                 params: {
-                                    calendarId: selectedCalendarId,
-                                    timeMin: info.start.toISOString(),
-                                    timeMax: info.end.toISOString()
+                                    start: info.start.toISOString().split('T')[0],
+                                    end: info.end.toISOString().split('T')[0]
                                 }
                             });
                             
                             const events = response.data.events.map(event => ({
                                 id: event.id,
                                 title: event.title,
-                                start: event.start.dateTime || event.start.date,
-                                end: event.end.dateTime || event.end.date,
-                                allDay: event.isAllDay,
+                                start: event.start_datetime,
+                                end: event.end_datetime,
+                                allDay: event.all_day === 1,
                                 description: event.description,
                                 location: event.location,
                                 backgroundColor: getEventColor(event),
@@ -301,14 +300,13 @@ export function getCalendarPage(userName: string): string {
             async function loadTodayTasks() {
                 try {
                     const today = new Date();
-                    today.setHours(0, 0, 0, 0);
                     const tomorrow = new Date(today);
                     tomorrow.setDate(tomorrow.getDate() + 1);
                     
                     const response = await axios.get('/api/calendar/events', {
                         params: {
-                            timeMin: today.toISOString(),
-                            timeMax: tomorrow.toISOString()
+                            start: today.toISOString().split('T')[0],
+                            end: tomorrow.toISOString().split('T')[0]
                         }
                     });
                     
@@ -323,7 +321,7 @@ export function getCalendarPage(userName: string): string {
                     listEl.innerHTML = taskEvents.map(event => \`
                         <div class="border-l-4 border-blue-500 pl-3 py-2">
                             <div class="font-medium text-sm">\${escapeHtml(event.title.replace('[タスク]', '').trim())}</div>
-                            <div class="text-xs text-gray-500">\${formatTime(event.start)}</div>
+                            <div class="text-xs text-gray-500">\${formatTimeFromDateTime(event.start_datetime)}</div>
                         </div>
                     \`).join('');
                 } catch (error) {
@@ -438,6 +436,99 @@ export function getCalendarPage(userName: string): string {
                 currentEventId = null;
             }
             
+            // イベント編集
+            async function editEvent(eventId) {
+                try {
+                    const response = await axios.get(\`/api/calendar/events/\${eventId}\`);
+                    const event = response.data.event;
+                    
+                    // モーダルのタイトルを変更
+                    document.getElementById('eventModalTitle').textContent = 'イベント編集';
+                    document.getElementById('deleteEventBtn').classList.remove('hidden');
+                    
+                    // フォームに既存データを入力
+                    document.getElementById('eventTitle').value = event.title || '';
+                    document.getElementById('eventDescription').value = event.description || '';
+                    document.getElementById('eventLocation').value = event.location || '';
+                    
+                    // 日時の設定
+                    if (event.start_datetime) {
+                        const startDate = new Date(event.start_datetime);
+                        document.getElementById('eventStart').value = formatDateTimeLocal(startDate);
+                    }
+                    if (event.end_datetime) {
+                        const endDate = new Date(event.end_datetime);
+                        document.getElementById('eventEnd').value = formatDateTimeLocal(endDate);
+                    }
+                    
+                    // 現在編集中のイベントIDを保存
+                    currentEventId = eventId;
+                    
+                    // モーダルを表示
+                    document.getElementById('eventModal').classList.remove('hidden');
+                } catch (error) {
+                    console.error('Failed to load event for editing:', error);
+                    alert('イベント情報の取得に失敗しました');
+                }
+            }
+            
+            // イベント削除
+            async function deleteEvent() {
+                if (!currentEventId) return;
+                
+                if (!confirm('このイベントを削除しますか？')) return;
+                
+                try {
+                    await axios.delete(\`/api/calendar/events/\${currentEventId}\`);
+                    alert('イベントを削除しました');
+                    closeEventModal();
+                    calendar.refetchEvents();
+                    loadTodayTasks();
+                } catch (error) {
+                    console.error('Failed to delete event:', error);
+                    alert('イベントの削除に失敗しました: ' + (error.response?.data?.message || error.message));
+                }
+            }
+            
+            // イベント保存
+            async function saveEvent(event) {
+                event.preventDefault();
+                
+                const formData = new FormData(event.target);
+                const eventData = {
+                    title: document.getElementById('eventTitle').value,
+                    description: document.getElementById('eventDescription').value,
+                    location: document.getElementById('eventLocation').value,
+                    start_datetime: document.getElementById('eventStart').value,
+                    end_datetime: document.getElementById('eventEnd').value,
+                    all_day: false // 現在は終日イベントは未対応
+                };
+                
+                if (!eventData.title || !eventData.start_datetime || !eventData.end_datetime) {
+                    alert('タイトル、開始時間、終了時間は必須です');
+                    return;
+                }
+                
+                try {
+                    if (currentEventId) {
+                        // 編集モード
+                        await axios.put(\`/api/calendar/events/\${currentEventId}\`, eventData);
+                        alert('イベントを更新しました');
+                    } else {
+                        // 新規作成モード
+                        await axios.post('/api/calendar/events', eventData);
+                        alert('イベントを作成しました');
+                    }
+                    
+                    closeEventModal();
+                    calendar.refetchEvents();
+                    loadTodayTasks();
+                } catch (error) {
+                    console.error('Failed to save event:', error);
+                    alert('イベントの保存に失敗しました: ' + (error.response?.data?.message || error.message));
+                }
+            }
+
             // カレンダーイベントからタスク作成
             async function createTaskFromCalendarEvent(eventId) {
                 if (!confirm('このイベントからタスクを作成しますか？')) return;
@@ -474,6 +565,12 @@ export function getCalendarPage(userName: string): string {
             function formatTime(date) {
                 if (!date.dateTime) return '終日';
                 const d = new Date(date.dateTime);
+                return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            }
+            
+            function formatTimeFromDateTime(datetime) {
+                if (!datetime) return '終日';
+                const d = new Date(datetime);
                 return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
             }
             

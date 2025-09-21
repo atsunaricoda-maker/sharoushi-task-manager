@@ -346,6 +346,7 @@ export function getClientsPage(userName: string): string {
         function closeNewClientModal() {
             document.getElementById('newClientModal').classList.remove('active');
             document.getElementById('newClientForm').reset();
+            resetFormToCreateMode();
         }
         
         document.getElementById('newClientForm').addEventListener('submit', async (e) => {
@@ -363,6 +364,76 @@ export function getClientsPage(userName: string): string {
             }
         });
         
+        async function editClient(clientId) {
+            try {
+                const res = await axios.get(\`/api/clients/\${clientId}\`);
+                const client = res.data.client;
+                
+                // Populate the form with existing data
+                document.querySelector('input[name="name"]').value = client.name || '';
+                document.querySelector('input[name="company_name"]').value = client.company_name || '';
+                document.querySelector('input[name="email"]').value = client.email || '';
+                document.querySelector('input[name="phone"]').value = client.phone || '';
+                document.querySelector('input[name="address"]').value = client.address || '';
+                document.querySelector('input[name="employee_count"]').value = client.employee_count || '';
+                document.querySelector('input[name="monthly_fee"]').value = client.monthly_fee || '';
+                document.querySelector('select[name="contract_plan"]').value = client.contract_plan || '';
+                document.querySelector('textarea[name="notes"]').value = client.notes || '';
+                
+                // Change form submission behavior for editing
+                const form = document.getElementById('newClientForm');
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.target);
+                    const clientData = Object.fromEntries(formData);
+                    
+                    try {
+                        await axios.put(\`/api/clients/\${clientId}\`, clientData);
+                        closeNewClientModal();
+                        await loadClients();
+                        alert('顧問先情報を更新しました');
+                        
+                        // Reset form to original create behavior
+                        resetFormToCreateMode();
+                    } catch (error) {
+                        console.error('Failed to update client:', error);
+                        alert('顧問先の更新に失敗しました');
+                    }
+                };
+                
+                // Change modal title and button text
+                document.querySelector('#newClientModal h3').textContent = '顧問先情報編集';
+                document.querySelector('#newClientForm button[type="submit"]').textContent = '更新';
+                
+                openNewClientModal();
+            } catch (error) {
+                console.error('Failed to load client for editing:', error);
+                alert('顧問先情報の取得に失敗しました');
+            }
+        }
+        
+        function resetFormToCreateMode() {
+            document.querySelector('#newClientModal h3').textContent = '新規顧問先登録';
+            document.querySelector('#newClientForm button[type="submit"]').textContent = '登録';
+            
+            // Reset form submission to original create behavior
+            const form = document.getElementById('newClientForm');
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const clientData = Object.fromEntries(formData);
+                
+                try {
+                    await axios.post('/api/clients', clientData);
+                    closeNewClientModal();
+                    await loadClients();
+                    alert('顧問先を登録しました');
+                } catch (error) {
+                    alert('顧問先の登録に失敗しました');
+                }
+            };
+        }
+
         async function generateTasksForClient(clientId) {
             const month = new Date().toISOString().slice(0, 7);
             if (confirm(\`\${month}のタスクを自動生成しますか？\`)) {

@@ -509,8 +509,90 @@ export function getAdminDashboardPage(userName: string): string {
 
         // レポート出力
         async function exportReport() {
-            alert('レポート出力機能は準備中です');
-            // TODO: CSVまたはPDFでのレポート出力実装
+            const period = document.getElementById('periodSelect').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            try {
+                // Get current dashboard data for export
+                const params = new URLSearchParams();
+                params.append('period', period);
+                if (period === 'custom' && startDate && endDate) {
+                    params.append('start_date', startDate);
+                    params.append('end_date', endDate);
+                }
+                
+                const response = await fetch(\`/api/admin/export-report?\${params.toString()}\`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('レポート生成に失敗しました');
+                }
+                
+                // Create CSV content from current data
+                const csvContent = generateCSVContent();
+                
+                // Create download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', \`admin-report-\${new Date().toISOString().split('T')[0]}.csv\`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                alert('管理者レポートをダウンロードしました');
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('レポート出力に失敗しました: ' + error.message);
+            }
+        }
+        
+        function generateCSVContent() {
+            const period = document.getElementById('periodSelect').value;
+            const periodLabel = {
+                'week': '今週',
+                'month': '今月', 
+                'year': '今年',
+                'custom': 'カスタム期間'
+            }[period];
+            
+            let csv = 'スタッフ管理レポート\\n';
+            csv += \`期間: \${periodLabel}\\n\`;
+            csv += \`生成日時: \${new Date().toLocaleString('ja-JP')}\\n\\n\`;
+            
+            // Summary section
+            csv += 'サマリー情報\\n';
+            csv += 'スタッフ数,完了タスク合計,総稼働時間,平均効率\\n';
+            csv += \`\${document.getElementById('staffCount')?.textContent || 0},\`;
+            csv += \`\${document.getElementById('totalCompleted')?.textContent || 0},\`;
+            csv += \`\${document.getElementById('totalHours')?.textContent || 0},\`;
+            csv += \`\${document.getElementById('avgEfficiency')?.textContent || 0}%\\n\\n\`;
+            
+            // Staff performance section
+            csv += 'スタッフ別実績\\n';
+            csv += 'スタッフ名,完了タスク,進行中,遅延中,効率率,総時間\\n';
+            
+            // Get data from staff table
+            const staffRows = document.querySelectorAll('#staffPerformanceTable tbody tr');
+            staffRows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 6) {
+                    csv += \`\${cells[0].textContent},\`;  // Name
+                    csv += \`\${cells[1].textContent},\`;  // Completed
+                    csv += \`\${cells[2].textContent},\`;  // In Progress  
+                    csv += \`\${cells[3].textContent},\`;  // Overdue
+                    csv += \`\${cells[4].textContent},\`;  // Efficiency
+                    csv += \`\${cells[5].textContent}\\n\`; // Hours
+                }
+            });
+            
+            return csv;
         }
 
         function logout() {
