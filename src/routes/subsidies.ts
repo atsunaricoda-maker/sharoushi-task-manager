@@ -3,22 +3,91 @@ import type { Bindings } from '../types'
 
 const subsidiesRouter = new Hono<{ Bindings: Bindings }>()
 
+// Test endpoint for debugging
+subsidiesRouter.get('/test', async (c) => {
+  try {
+    console.log('Test endpoint called')
+    
+    if (!c.env.DB) {
+      return c.json({ 
+        error: 'DB not available',
+        bindings: Object.keys(c.env || {})
+      }, 500)
+    }
+    
+    // Simple test query
+    const result = await c.env.DB.prepare('SELECT 1 as test').first()
+    
+    return c.json({
+      success: true,
+      message: 'Database connection test successful',
+      result,
+      bindings: Object.keys(c.env)
+    })
+  } catch (error) {
+    return c.json({
+      error: 'Database test failed',
+      message: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
 // Get all subsidies (master list)
 subsidiesRouter.get('/', async (c) => {
   try {
+    console.log('GET /api/subsidies called')
+    
+    // Debug: Check if DB exists
+    if (!c.env.DB) {
+      console.error('Database not available in subsidies GET')
+      return c.json({ 
+        error: 'Database not configured', 
+        debug: 'DB binding missing in subsidies GET endpoint' 
+      }, 500)
+    }
+    
+    console.log('Database connection available')
+    
+    // Check if subsidies table exists
+    const tableCheck = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='subsidies'
+    `).first()
+    
+    if (!tableCheck) {
+      console.error('subsidies table does not exist')
+      return c.json({ 
+        success: true,
+        subsidies: [],
+        debug: 'subsidies table not found - returning empty array'
+      })
+    }
+    
+    console.log('subsidies table exists')
+    
     const result = await c.env.DB.prepare(`
       SELECT * FROM subsidies 
       WHERE is_active = 1 
       ORDER BY created_at DESC
     `).all()
     
+    console.log('Query result:', result)
+    
     return c.json({
       success: true,
-      subsidies: result.results || []
+      subsidies: result.results || [],
+      debug: {
+        resultCount: result.results?.length || 0,
+        tableExists: true
+      }
     })
   } catch (error) {
     console.error('Error fetching subsidies:', error)
-    return c.json({ error: 'Failed to fetch subsidies' }, 500)
+    return c.json({ 
+      error: 'Failed to fetch subsidies',
+      debug: error.message,
+      stack: error.stack 
+    }, 500)
   }
 })
 
