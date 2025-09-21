@@ -152,7 +152,9 @@ reportsRouter.get('/monthly', async (c) => {
     const month = c.req.query('month') || (new Date().getMonth() + 1)
     
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-    const endDate = new Date(Number(year), Number(month), 0).toISOString().split('T')[0]
+    // Get the last day of the month correctly
+    const lastDay = new Date(Number(year), Number(month), 0).getDate()
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     
     // Get summary statistics
     const summary = await c.env.DB.prepare(`
