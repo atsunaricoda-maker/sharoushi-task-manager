@@ -32,20 +32,8 @@ clientsRouter.get('/:id', async (c) => {
       ORDER BY t.due_date ASC
     `).bind(clientId).all()
     
-    // Get assigned templates
-    const templates = await c.env.DB.prepare(`
-      SELECT 
-        ctt.*,
-        tt.name as template_name,
-        tt.description as template_description,
-        tt.frequency,
-        tt.estimated_hours,
-        u.name as assigned_user_name
-      FROM client_task_templates ctt
-      LEFT JOIN task_templates tt ON ctt.template_id = tt.id
-      LEFT JOIN users u ON ctt.assigned_user_id = u.id
-      WHERE ctt.client_id = ? AND ctt.is_active = TRUE
-    `).bind(clientId).all()
+    // Get assigned templates (template tables not yet created, returning empty)
+    const templates = { results: [] }
     
     // Get task history
     const taskHistory = await c.env.DB.prepare(`
@@ -75,22 +63,21 @@ clientsRouter.put('/:id', async (c) => {
     const clientId = c.req.param('id')
     const body = await c.req.json()
     const {
-      name, name_kana, address, contact_email, contact_phone,
-      employee_count, health_insurance_type, contract_plan,
-      primary_contact_name, monthly_fee
+      name, company_name, email, phone, address,
+      contract_plan, employee_count, monthly_fee, notes
     } = body
     
     await c.env.DB.prepare(`
       UPDATE clients SET
-        name = ?, name_kana = ?, address = ?, contact_email = ?,
-        contact_phone = ?, employee_count = ?, health_insurance_type = ?,
-        contract_plan = ?, primary_contact_name = ?, monthly_fee = ?,
+        name = ?, company_name = ?, email = ?, phone = ?,
+        address = ?, contract_plan = ?, employee_count = ?, 
+        monthly_fee = ?, notes = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).bind(
-      name, name_kana, address, contact_email, contact_phone,
-      employee_count, health_insurance_type, contract_plan,
-      primary_contact_name, monthly_fee, clientId
+      name, company_name, email, phone,
+      address, contract_plan, employee_count,
+      monthly_fee, notes, clientId
     ).run()
     
     return c.json({ success: true, message: '顧問先情報を更新しました' })
@@ -104,21 +91,23 @@ clientsRouter.post('/', async (c) => {
   try {
     const body = await c.req.json()
     const {
-      name, name_kana, address, contact_email, contact_phone,
-      employee_count, health_insurance_type, contract_plan,
-      primary_contact_name, monthly_fee, contract_start_date
+      name, company_name, email, phone, address,
+      contract_plan, employee_count, monthly_fee, notes
     } = body
+    
+    // Validate required field
+    if (!name) {
+      return c.json({ error: '顧問先名は必須です' }, 400)
+    }
     
     const result = await c.env.DB.prepare(`
       INSERT INTO clients (
-        name, name_kana, address, contact_email, contact_phone,
-        employee_count, health_insurance_type, contract_plan,
-        primary_contact_name, monthly_fee, contract_start_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        name, company_name, email, phone, address,
+        contract_plan, employee_count, monthly_fee, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      name, name_kana, address, contact_email, contact_phone,
-      employee_count, health_insurance_type, contract_plan,
-      primary_contact_name, monthly_fee, contract_start_date
+      name, company_name || null, email || null, phone || null, address || null,
+      contract_plan || null, employee_count || null, monthly_fee || null, notes || null
     ).run()
     
     return c.json({

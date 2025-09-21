@@ -1,206 +1,154 @@
 import { Hono } from 'hono'
-import { NotificationService } from '../lib/notification'
-
-type Bindings = {
-  DB: D1Database
-  SENDGRID_API_KEY?: string
-}
+import type { Bindings } from '../types'
 
 export const notificationRouter = new Hono<{ Bindings: Bindings }>()
 
-// 通知設定の取得
+// Get user notification settings
 notificationRouter.get('/settings', async (c) => {
   try {
-    const user = c.get('user')
-    const userId = parseInt(user.sub)
+    const userId = c.req.query('user_id')
     
-    const service = new NotificationService(c.env.DB)
-    const settings = await service.getUserNotificationSettings(userId)
+    if (!userId) {
+      return c.json({ error: 'User ID is required' }, 400)
+    }
     
-    return c.json({ settings })
+    const settings = await c.env.DB.prepare(`
+      SELECT * FROM notification_settings
+      WHERE user_id = ?
+    `).bind(userId).first()
+    
+    // Return default settings if none exist
+    if (!settings) {
+      return c.json({
+        user_id: userId,
+        email_enabled: true,
+        push_enabled: false,
+        sms_enabled: false,
+        task_reminders: true,
+        deadline_alerts: true,
+        subsidy_updates: true,
+        client_updates: true,
+        reminder_time: '09:00'
+      })
+    }
+    
+    return c.json(settings)
   } catch (error) {
+    console.error('Error fetching notification settings:', error)
     return c.json({ error: 'Failed to fetch notification settings' }, 500)
   }
 })
 
-// 通知設定の更新
-notificationRouter.put('/settings', async (c) => {
+// Update notification settings
+notificationRouter.post('/settings', async (c) => {
   try {
-    const user = c.get('user')
-    const userId = parseInt(user.sub)
     const body = await c.req.json()
+    const {
+      user_id,
+      email_enabled = true,
+      push_enabled = false,
+      sms_enabled = false,
+      task_reminders = true,
+      deadline_alerts = true,
+      subsidy_updates = true,
+      client_updates = true,
+      reminder_time = '09:00'
+    } = body
     
-    const service = new NotificationService(c.env.DB)
-    await service.updateNotificationSettings(userId, body)
+    if (!user_id) {
+      return c.json({ error: 'User ID is required' }, 400)
+    }
+    
+    // Check if settings exist
+    const existing = await c.env.DB.prepare(`
+      SELECT id FROM notification_settings WHERE user_id = ?
+    `).bind(user_id).first()
+    
+    if (existing) {
+      // Update existing settings
+      await c.env.DB.prepare(`
+        UPDATE notification_settings SET
+          email_enabled = ?, push_enabled = ?, sms_enabled = ?,
+          task_reminders = ?, deadline_alerts = ?, subsidy_updates = ?,
+          client_updates = ?, reminder_time = ?, updated_at = datetime('now')
+        WHERE user_id = ?
+      `).bind(
+        email_enabled ? 1 : 0, push_enabled ? 1 : 0, sms_enabled ? 1 : 0,
+        task_reminders ? 1 : 0, deadline_alerts ? 1 : 0, subsidy_updates ? 1 : 0,
+        client_updates ? 1 : 0, reminder_time, user_id
+      ).run()
+    } else {
+      // Create new settings
+      await c.env.DB.prepare(`
+        INSERT INTO notification_settings 
+        (user_id, email_enabled, push_enabled, sms_enabled, task_reminders, 
+         deadline_alerts, subsidy_updates, client_updates, reminder_time)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        user_id,
+        email_enabled ? 1 : 0, push_enabled ? 1 : 0, sms_enabled ? 1 : 0,
+        task_reminders ? 1 : 0, deadline_alerts ? 1 : 0, subsidy_updates ? 1 : 0,
+        client_updates ? 1 : 0, reminder_time
+      ).run()
+    }
     
     return c.json({ 
       success: true,
       message: '通知設定を更新しました'
     })
   } catch (error) {
+    console.error('Error updating notification settings:', error)
     return c.json({ error: 'Failed to update notification settings' }, 500)
   }
 })
 
-// タスクリマインダーを送信（テスト用）
-notificationRouter.post('/send-reminder/:taskId', async (c) => {
+// Get pending notifications
+notificationRouter.get('/pending', async (c) => {
   try {
-    const taskId = parseInt(c.req.param('taskId'))
+    const userId = c.req.query('user_id')
+    const now = new Date()
     
-    const service = new NotificationService(c.env.DB, c.env.SENDGRID_API_KEY)
-    await service.sendTaskReminder(taskId)
-    
-    return c.json({ 
-      success: true,
-      message: 'リマインダーを送信しました'
-    })
-  } catch (error) {
-    return c.json({ error: 'Failed to send reminder' }, 500)
-  }
-})
-
-// 日次サマリーを送信
-notificationRouter.post('/send-daily-summary', async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = parseInt(user.sub)
-    
-    const service = new NotificationService(c.env.DB, c.env.SENDGRID_API_KEY)
-    await service.sendDailySummary(userId)
-    
-    return c.json({ 
-      success: true,
-      message: '日次サマリーを送信しました'
-    })
-  } catch (error) {
-    return c.json({ error: 'Failed to send daily summary' }, 500)
-  }
-})
-
-// 遅延タスクの通知（管理者のみ）
-notificationRouter.post('/notify-overdue', async (c) => {
-  try {
-    const service = new NotificationService(c.env.DB, c.env.SENDGRID_API_KEY)
-    await service.notifyOverdueTasks()
-    
-    return c.json({ 
-      success: true,
-      message: '遅延タスクの通知を送信しました'
-    })
-  } catch (error) {
-    return c.json({ error: 'Failed to notify overdue tasks' }, 500)
-  }
-})
-
-// 通知履歴の取得
-notificationRouter.get('/history', async (c) => {
-  try {
-    const user = c.get('user')
-    const userId = parseInt(user.sub)
-    const { limit = 50, offset = 0 } = c.req.query()
-    
-    const logs = await c.env.DB.prepare(`
+    // Get tasks due soon
+    const tasksDue = await c.env.DB.prepare(`
       SELECT 
-        nl.*,
-        t.title as task_title
-      FROM notification_logs nl
-      LEFT JOIN tasks t ON nl.task_id = t.id
-      WHERE nl.user_id = ?
-      ORDER BY nl.sent_at DESC
-      LIMIT ? OFFSET ?
-    `).bind(userId, parseInt(limit as string), parseInt(offset as string)).all()
-    
-    return c.json({ 
-      logs: logs.results,
-      total: logs.results?.length || 0
-    })
-  } catch (error) {
-    return c.json({ error: 'Failed to fetch notification history' }, 500)
-  }
-})
-
-// スケジュール通知の作成
-notificationRouter.post('/schedule', async (c) => {
-  try {
-    const body = await c.req.json()
-    const { type, scheduledFor, targetId, metadata } = body
-    
-    const result = await c.env.DB.prepare(`
-      INSERT INTO scheduled_notifications (
-        type, scheduled_for, target_id, metadata
-      ) VALUES (?, ?, ?, ?)
-    `).bind(
-      type,
-      scheduledFor,
-      targetId,
-      JSON.stringify(metadata)
-    ).run()
-    
-    return c.json({ 
-      success: true,
-      id: result.meta.last_row_id,
-      message: '通知をスケジュールしました'
-    })
-  } catch (error) {
-    return c.json({ error: 'Failed to schedule notification' }, 500)
-  }
-})
-
-// Cronジョブ用：スケジュール通知の処理
-notificationRouter.post('/process-scheduled', async (c) => {
-  try {
-    const now = new Date().toISOString()
-    
-    // 処理対象の通知を取得
-    const notifications = await c.env.DB.prepare(`
-      SELECT * FROM scheduled_notifications
-      WHERE status = 'pending'
-        AND scheduled_for <= ?
+        'task' as type,
+        t.id,
+        t.title,
+        t.due_date,
+        c.name as client_name
+      FROM tasks t
+      LEFT JOIN clients c ON t.client_id = c.id
+      WHERE t.status != 'completed'
+        AND t.due_date <= datetime('now', '+3 days')
+        ${userId ? 'AND t.assigned_to = ?' : ''}
+      ORDER BY t.due_date ASC
       LIMIT 10
-    `).bind(now).all()
+    `).bind(...(userId ? [userId] : [])).all()
     
-    const service = new NotificationService(c.env.DB, c.env.SENDGRID_API_KEY)
-    let processedCount = 0
+    // Get subsidy deadlines
+    const subsidyDeadlines = await c.env.DB.prepare(`
+      SELECT 
+        'subsidy' as type,
+        sa.id,
+        sa.subsidy_name as title,
+        sa.deadline_date as due_date,
+        c.name as client_name
+      FROM subsidy_applications sa
+      LEFT JOIN clients c ON sa.client_id = c.id
+      WHERE sa.status IN ('preparing', 'submitted')
+        AND sa.deadline_date <= datetime('now', '+7 days')
+      ORDER BY sa.deadline_date ASC
+      LIMIT 10
+    `).all()
     
-    for (const notification of notifications.results || []) {
-      try {
-        // 通知タイプに応じて処理
-        switch (notification.type) {
-          case 'task_reminder':
-            await service.sendTaskReminder(notification.target_id as number)
-            break
-          case 'daily_summary':
-            await service.sendDailySummary(notification.target_id as number)
-            break
-          case 'overdue_check':
-            await service.notifyOverdueTasks()
-            break
-        }
-        
-        // 処理済みにマーク
-        await c.env.DB.prepare(`
-          UPDATE scheduled_notifications
-          SET status = 'sent', processed_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).bind(notification.id).run()
-        
-        processedCount++
-      } catch (error) {
-        // エラーの場合は失敗にマーク
-        await c.env.DB.prepare(`
-          UPDATE scheduled_notifications
-          SET status = 'failed', processed_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).bind(notification.id).run()
-      }
-    }
-    
-    return c.json({ 
-      success: true,
-      processed: processedCount,
-      message: `${processedCount}件の通知を処理しました`
+    return c.json({
+      tasks: tasksDue.results || [],
+      subsidies: subsidyDeadlines.results || []
     })
   } catch (error) {
-    return c.json({ error: 'Failed to process scheduled notifications' }, 500)
+    console.error('Error fetching pending notifications:', error)
+    return c.json({ error: 'Failed to fetch pending notifications' }, 500)
   }
 })
+
+export default notificationRouter

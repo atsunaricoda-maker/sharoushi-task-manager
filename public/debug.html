@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>認証デバッグ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow p-6">
+        <h1 class="text-2xl font-bold mb-4">認証状態デバッグ</h1>
+        
+        <div id="status" class="mb-4">
+            <p class="text-gray-600">チェック中...</p>
+        </div>
+        
+        <div id="cookies" class="mb-4 p-4 bg-gray-50 rounded">
+            <h2 class="font-bold mb-2">Cookies:</h2>
+            <pre id="cookie-content" class="text-sm"></pre>
+        </div>
+        
+        <div id="auth-status" class="mb-4 p-4 bg-blue-50 rounded">
+            <h2 class="font-bold mb-2">Auth API Response:</h2>
+            <pre id="auth-content" class="text-sm"></pre>
+        </div>
+        
+        <div class="space-y-2">
+            <button onclick="checkAuth()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                認証状態を再チェック
+            </button>
+            <button onclick="clearCookies()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                Cookieをクリア
+            </button>
+            <button onclick="window.location.href='/'" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                トップページへ
+            </button>
+            <button onclick="window.location.href='/login'" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                ログインページへ
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        async function checkAuth() {
+            // Show current cookies
+            document.getElementById('cookie-content').textContent = document.cookie || '(No cookies)';
+            
+            // Check auth status via API
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                document.getElementById('auth-content').textContent = JSON.stringify(data, null, 2);
+                
+                if (data.authenticated) {
+                    document.getElementById('status').innerHTML = `
+                        <p class="text-green-600 font-bold">✅ 認証済み</p>
+                        <p>ユーザー: ${data.user?.email || 'Unknown'}</p>
+                    `;
+                } else {
+                    document.getElementById('status').innerHTML = `
+                        <p class="text-red-600 font-bold">❌ 未認証</p>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('auth-content').textContent = 'Error: ' + error.message;
+                document.getElementById('status').innerHTML = `
+                    <p class="text-red-600 font-bold">⚠️ エラー</p>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        function clearCookies() {
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+            });
+            alert('Cookieをクリアしました');
+            checkAuth();
+        }
+        
+        // Initial check
+        checkAuth();
+        
+        // Check every 2 seconds
+        setInterval(checkAuth, 2000);
+    </script>
+</body>
+</html>

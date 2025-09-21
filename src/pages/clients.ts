@@ -163,12 +163,12 @@ export function getClientsPage(userName: string): string {
                 <form id="newClientForm" class="space-y-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">会社名 <span class="text-red-500">*</span></label>
+                            <label class="block text-sm font-medium text-gray-700">顧問先名 <span class="text-red-500">*</span></label>
                             <input type="text" name="name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">会社名（カナ）</label>
-                            <input type="text" name="name_kana" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <label class="block text-sm font-medium text-gray-700">会社名</label>
+                            <input type="text" name="company_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                     </div>
                     
@@ -179,12 +179,12 @@ export function getClientsPage(userName: string): string {
                     
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">連絡先メール</label>
-                            <input type="email" name="contact_email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <label class="block text-sm font-medium text-gray-700">メールアドレス</label>
+                            <input type="email" name="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">電話番号</label>
-                            <input type="tel" name="contact_phone" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <input type="tel" name="phone" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                     </div>
                     
@@ -194,13 +194,8 @@ export function getClientsPage(userName: string): string {
                             <input type="number" name="employee_count" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">健康保険</label>
-                            <select name="health_insurance_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                                <option value="">選択してください</option>
-                                <option value="協会けんぽ">協会けんぽ</option>
-                                <option value="健保組合">健保組合</option>
-                                <option value="その他">その他</option>
-                            </select>
+                            <label class="block text-sm font-medium text-gray-700">月額顧問料</label>
+                            <input type="number" name="monthly_fee" min="0" step="1000" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">契約プラン</label>
@@ -213,15 +208,9 @@ export function getClientsPage(userName: string): string {
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">担当者名</label>
-                            <input type="text" name="primary_contact_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">月額顧問料</label>
-                            <input type="number" name="monthly_fee" min="0" step="1000" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                        </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">備考</label>
+                        <textarea name="notes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">

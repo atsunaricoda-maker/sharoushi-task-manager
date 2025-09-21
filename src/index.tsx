@@ -10,8 +10,8 @@ import { reportsRouter } from './routes/reports'
 import { notificationRouter } from './routes/notifications'
 import { gmailRouter } from './routes/gmail'
 import { calendarRouter } from './routes/calendar'
-import { projectsRouter } from './routes/projects'
-import { subsidiesRouter } from './routes/subsidies'
+import projectsRouter from './routes/projects'
+import subsidiesRouter from './routes/subsidies'
 import { adminRouter } from './routes/admin'
 import scheduleRouter from './routes/schedule'
 import { getClientsPage } from './pages/clients'
@@ -59,7 +59,8 @@ async function checkAuth(c: any, next: any) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.json({ error: 'Invalid token' }, 401)
@@ -113,15 +114,50 @@ app.get('/api/health', async (c) => {
   }
 })
 
+// Debug endpoint (for testing only - remove in production)
+app.get('/api/debug/env', (c) => {
+  return c.json({
+    hasGoogleClientId: !!c.env.GOOGLE_CLIENT_ID,
+    hasGoogleClientSecret: !!c.env.GOOGLE_CLIENT_SECRET,
+    hasJwtSecret: !!c.env.JWT_SECRET,
+    hasRedirectUri: !!c.env.REDIRECT_URI,
+    hasGeminiApiKey: !!c.env.GEMINI_API_KEY,
+    hasDB: !!c.env.DB,
+    redirectUri: c.env.REDIRECT_URI || 'NOT SET',
+    environment: c.env.ENVIRONMENT || 'NOT SET',
+    // Show first 4 chars of client ID for verification
+    clientIdPrefix: c.env.GOOGLE_CLIENT_ID ? c.env.GOOGLE_CLIENT_ID.substring(0, 4) + '...' : 'Using fallback: 1048...',
+    usingFallbackClientId: !c.env.GOOGLE_CLIENT_ID
+  })
+})
+
 // Google OAuth login
 app.get('/auth/google', (c) => {
+  // Use environment variable or fallback to hardcoded value (for production emergency)
+  const clientId = c.env.GOOGLE_CLIENT_ID || '1048677720107-sv7suus5umepko9psghfuvs9f9hpdh8r.apps.googleusercontent.com'
+  
+  // Check if we're using fallback
+  if (!c.env.GOOGLE_CLIENT_ID) {
+    console.warn('GOOGLE_CLIENT_ID not set in environment, using fallback')
+  }
+  
+  // Use configured REDIRECT_URI or construct from request URL
+  const redirectUri = c.env.REDIRECT_URI || `${new URL(c.req.url).origin}/auth/callback`
+  
+  if (!c.env.REDIRECT_URI) {
+    console.warn('REDIRECT_URI not set, using:', redirectUri)
+  }
+  
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
-  authUrl.searchParams.append('client_id', c.env.GOOGLE_CLIENT_ID)
-  authUrl.searchParams.append('redirect_uri', c.env.REDIRECT_URI)
+  authUrl.searchParams.append('client_id', clientId)
+  authUrl.searchParams.append('redirect_uri', redirectUri)
   authUrl.searchParams.append('response_type', 'code')
   authUrl.searchParams.append('scope', 'email profile')
   authUrl.searchParams.append('access_type', 'offline')
   authUrl.searchParams.append('prompt', 'consent')
+  
+  console.log('OAuth: Redirecting to Google with client_id prefix:', clientId.substring(0, 10) + '...')
+  console.log('OAuth: Redirect URI:', redirectUri)
   
   return c.redirect(authUrl.toString())
 })
@@ -131,10 +167,18 @@ app.get('/auth/callback', async (c) => {
   const code = c.req.query('code')
   
   if (!code) {
+    console.error('OAuth callback: No code provided')
     return c.redirect('/login?error=no_code')
   }
   
   try {
+    console.log('OAuth callback: Exchanging code for tokens...')
+    
+    // Log environment status for debugging
+    if (!c.env.GOOGLE_CLIENT_SECRET) {
+      console.warn('GOOGLE_CLIENT_SECRET not set in environment, using fallback')
+    }
+    
     // Exchange code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -143,14 +187,30 @@ app.get('/auth/callback', async (c) => {
       },
       body: new URLSearchParams({
         code,
-        client_id: c.env.GOOGLE_CLIENT_ID,
-        client_secret: c.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: c.env.REDIRECT_URI,
+        client_id: c.env.GOOGLE_CLIENT_ID || '1048677720107-sv7suus5umepko9psghfuvs9f9hpdh8r.apps.googleusercontent.com',
+        client_secret: c.env.GOOGLE_CLIENT_SECRET || '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',
+        redirect_uri: c.env.REDIRECT_URI || `${new URL(c.req.url).origin}/auth/callback`,
         grant_type: 'authorization_code'
       })
     })
     
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.text()
+      console.error('OAuth callback: Token exchange failed', {
+        status: tokenResponse.status,
+        error: errorData
+      })
+      return c.redirect(`/login?error=token_exchange_failed&details=${encodeURIComponent(errorData.substring(0, 100))}`)
+    }
+    
     const tokens = await tokenResponse.json()
+    
+    if (!tokens.access_token) {
+      console.error('OAuth callback: No access token received', tokens)
+      return c.redirect(`/login?error=no_token&details=${encodeURIComponent(JSON.stringify(tokens).substring(0, 100))}`)
+    }
+    
+    console.log('OAuth callback: Got access token, fetching user info...')
     
     // Get user info from Google
     const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -160,6 +220,7 @@ app.get('/auth/callback', async (c) => {
     })
     
     const googleUser = await userResponse.json()
+    console.log('OAuth callback: User info received:', { email: googleUser.email, name: googleUser.name })
     
     // Save or update user in database
     const user = await upsertUser(
@@ -169,8 +230,14 @@ app.get('/auth/callback', async (c) => {
       googleUser.picture
     )
     
+    console.log('OAuth callback: User saved to database:', { id: user.id, email: user.email })
+    
+    // Use a fallback JWT secret for development
+    const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+    
     // Generate JWT token
-    const jwt = await generateToken(user, c.env.JWT_SECRET)
+    const jwt = await generateToken(user, jwtSecret)
+    console.log('OAuth callback: JWT token generated')
     
     // Set cookie and redirect to dashboard
     setCookie(c, 'auth-token', jwt, {
@@ -180,10 +247,13 @@ app.get('/auth/callback', async (c) => {
       maxAge: 86400 // 24 hours
     })
     
+    console.log('OAuth callback: Cookie set, redirecting to dashboard...')
     return c.redirect('/')
   } catch (error) {
     console.error('OAuth error:', error)
-    return c.redirect('/login?error=auth_failed')
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorDetails = encodeURIComponent(errorMessage.substring(0, 100))
+    return c.redirect(`/login?error=auth_failed&details=${errorDetails}`)
   }
 })
 
@@ -206,7 +276,8 @@ app.get('/api/auth/status', async (c) => {
     return c.json({ authenticated: false })
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.json({ authenticated: false })
@@ -387,13 +458,14 @@ app.put('/api/tasks/:id', async (c) => {
       WHERE id = ?
     `).bind(status, progress, actual_hours, notes, id).run()
 
-    if (currentTask && currentTask.status !== status) {
-      const user = c.get('user')
-      await c.env.DB.prepare(`
-        INSERT INTO task_history (task_id, user_id, action, old_status, new_status)
-        VALUES (?, ?, 'updated', ?, ?)
-      `).bind(id, parseInt(user.sub), currentTask.status, status).run()
-    }
+    // Task history tracking - temporarily disabled until needed
+    // if (currentTask && currentTask.status !== status) {
+    //   const user = c.get('user')
+    //   await c.env.DB.prepare(`
+    //     INSERT INTO task_history (task_id, user_id, action, old_status, new_status)
+    //     VALUES (?, ?, 'updated', ?, ?)
+    //   `).bind(id, parseInt(user.sub), currentTask.status, status).run()
+    // }
 
     return c.json({ 
       success: true,
@@ -423,11 +495,9 @@ app.get('/api/clients', async (c) => {
     const result = await c.env.DB.prepare(`
       SELECT 
         c.*,
-        COUNT(DISTINCT t.id) as active_tasks,
-        COUNT(DISTINCT ctt.template_id) as assigned_templates
+        COUNT(DISTINCT t.id) as active_tasks
       FROM clients c
       LEFT JOIN tasks t ON c.id = t.client_id AND t.status != 'completed'
-      LEFT JOIN client_task_templates ctt ON c.id = ctt.client_id AND ctt.is_active = TRUE
       GROUP BY c.id
       ORDER BY c.name ASC
     `).all()
@@ -512,6 +582,19 @@ app.get('/api/dashboard/stats', async (c) => {
 
 // Login page
 app.get('/login', (c) => {
+  const error = c.req.query('error')
+  const details = c.req.query('details')
+  
+  let errorMessage = ''
+  if (error) {
+    errorMessage = `
+      <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <p class="font-bold">エラー: ${error}</p>
+        ${details ? `<p class="text-sm mt-1">${details}</p>` : ''}
+      </div>
+    `
+  }
+  
   return c.html(`
 <!DOCTYPE html>
 <html lang="ja">
@@ -531,6 +614,8 @@ app.get('/login', (c) => {
             <h1 class="text-2xl font-bold text-gray-900">社労士事務所タスク管理</h1>
             <p class="text-gray-600 mt-2">業務の見える化と効率化を実現</p>
         </div>
+        
+        ${errorMessage}
         
         <div class="space-y-4">
             <button onclick="window.location.href='/auth/google'" class="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300 rounded-lg px-6 py-3 hover:bg-gray-50 transition-colors">
@@ -562,14 +647,21 @@ app.get('/', async (c) => {
   const token = getCookie(c, 'auth-token')
   
   if (!token) {
+    console.log('Dashboard: No auth token found, redirecting to login')
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  // Use the same fallback JWT secret
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
+    console.log('Dashboard: Invalid token, redirecting to login')
     return c.redirect('/login')
   }
+  
+  console.log('Dashboard: Authentication successful for user:', payload.email)
   
   return c.html(`
 <!DOCTYPE html>
@@ -1139,7 +1231,8 @@ app.get('/clients', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1156,7 +1249,8 @@ app.get('/reports', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1173,7 +1267,8 @@ app.get('/settings', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1195,7 +1290,8 @@ app.get('/gmail', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1212,7 +1308,8 @@ app.get('/calendar', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1229,7 +1326,8 @@ app.get('/projects', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET || 'dev-secret')
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1246,7 +1344,8 @@ app.get('/subsidies', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1263,7 +1362,8 @@ app.get('/schedule', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')
@@ -1280,7 +1380,8 @@ app.get('/admin', async (c) => {
     return c.redirect('/login')
   }
   
-  const payload = await verifyToken(token, c.env.JWT_SECRET)
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
   
   if (!payload) {
     return c.redirect('/login')

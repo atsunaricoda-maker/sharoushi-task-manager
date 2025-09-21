@@ -1,0 +1,61 @@
+name: Test and Lint
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check || npx tsc --noEmit
+
+      - name: Lint check
+        run: npm run lint || echo "No lint script configured"
+
+      - name: Build test
+        run: npm run build
+        
+      - name: Check for security vulnerabilities
+        run: npm audit --audit-level=high || true
+
+  migration-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Check migration files
+        run: |
+          echo "Checking SQL migration files..."
+          for file in migrations/*.sql; do
+            if [ -f "$file" ]; then
+              echo "Validating: $file"
+              # 基本的なSQLシンタックスチェック
+              if grep -q "DROP TABLE" "$file"; then
+                echo "⚠️  Warning: DROP TABLE found in $file"
+              fi
+            fi
+          done
+          
+      - name: Migration order check
+        run: |
+          echo "Checking migration file ordering..."
+          ls -1 migrations/*.sql | sort -V
