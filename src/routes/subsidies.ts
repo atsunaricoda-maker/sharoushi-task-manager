@@ -246,6 +246,66 @@ subsidiesRouter.post('/applications', async (c) => {
   }
 })
 
+// Get single subsidy application by ID
+subsidiesRouter.get('/applications/:id', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Get application details with related data
+    const application = await c.env.DB.prepare(`
+      SELECT 
+        sa.*,
+        c.name as client_name,
+        s.name as subsidy_name,
+        s.max_amount as subsidy_max_amount,
+        s.description as subsidy_description
+      FROM subsidy_applications sa
+      LEFT JOIN clients c ON sa.client_id = c.id
+      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
+      WHERE sa.id = ? AND sa.created_by = ?
+    `).bind(applicationId, userId).first()
+    
+    if (!application) {
+      return c.json({ error: 'Application not found' }, 404)
+    }
+    
+    // Get checklist items
+    let checklist = []
+    try {
+      const checklistResult = await c.env.DB.prepare(`
+        SELECT * FROM subsidy_checklists 
+        WHERE application_id = ? 
+        ORDER BY display_order ASC
+      `).bind(applicationId).all()
+      
+      checklist = checklistResult.results || []
+    } catch (checklistError) {
+      console.log('No checklist table or items found')
+    }
+    
+    return c.json({
+      success: true,
+      application: {
+        ...application,
+        checklist
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching application detail:', error)
+    return c.json({ 
+      error: 'Failed to fetch application detail',
+      debug: error.message 
+    }, 500)
+  }
+})
+
 // Search subsidies with filters
 subsidiesRouter.get('/search', async (c) => {
   try {
