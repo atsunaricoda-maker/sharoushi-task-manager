@@ -102,14 +102,14 @@ reportsRouter.get('/task-completion', async (c) => {
     
     const result = await c.env.DB.prepare(`
       SELECT 
-        DATE(completed_at) as date,
+        DATE(COALESCE(completed_at, updated_at)) as date,
         COUNT(*) as completed_tasks
       FROM tasks
       WHERE status = 'completed'
-        AND completed_at BETWEEN ? AND ?
-      GROUP BY DATE(completed_at)
+        AND DATE(COALESCE(completed_at, updated_at)) BETWEEN ? AND ?
+      GROUP BY DATE(COALESCE(completed_at, updated_at))
       ORDER BY date DESC
-    `).bind(startDate, endDate + 'T23:59:59').all()
+    `).bind(startDate, endDate).all()
     
     return c.json(result.results || [])
   } catch (error) {
@@ -162,11 +162,11 @@ reportsRouter.get('/monthly', async (c) => {
         SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tasks,
         SUM(CASE WHEN status != 'completed' AND due_date < datetime('now') THEN 1 ELSE 0 END) as overdue_tasks,
-        SUM(estimated_hours) as total_estimated_hours,
-        SUM(actual_hours) as total_actual_hours
+        COALESCE(SUM(estimated_hours), 0) as total_estimated_hours,
+        COALESCE(SUM(actual_hours), 0) as total_actual_hours
       FROM tasks
-      WHERE created_at BETWEEN ? AND ?
-    `).bind(startDate, endDate + 'T23:59:59').first()
+      WHERE DATE(created_at) BETWEEN ? AND ?
+    `).bind(startDate, endDate).first()
     
     // Get daily trend
     const dailyTrend = await c.env.DB.prepare(`
@@ -174,12 +174,12 @@ reportsRouter.get('/monthly', async (c) => {
         DATE(created_at) as date,
         COUNT(*) as total,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-        ROUND(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) as completion_rate
+        ROUND(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as completion_rate
       FROM tasks
-      WHERE created_at BETWEEN ? AND ?
+      WHERE DATE(created_at) BETWEEN ? AND ?
       GROUP BY DATE(created_at)
       ORDER BY date
-    `).bind(startDate, endDate + 'T23:59:59').all()
+    `).bind(startDate, endDate).all()
     
     // Get client breakdown
     const clientBreakdown = await c.env.DB.prepare(`
@@ -190,11 +190,11 @@ reportsRouter.get('/monthly', async (c) => {
         c.monthly_fee
       FROM clients c
       LEFT JOIN tasks t ON c.id = t.client_id 
-        AND t.created_at BETWEEN ? AND ?
+        AND DATE(t.created_at) BETWEEN ? AND ?
       WHERE c.is_active = 1
       GROUP BY c.id
       ORDER BY task_count DESC
-    `).bind(startDate, endDate + 'T23:59:59').all()
+    `).bind(startDate, endDate).all()
     
     // Get staff breakdown
     const staffBreakdown = await c.env.DB.prepare(`
@@ -203,13 +203,13 @@ reportsRouter.get('/monthly', async (c) => {
         COUNT(t.id) as task_count,
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_count,
         AVG(CASE WHEN t.status = 'completed' AND t.estimated_hours > 0 
-          THEN t.actual_hours / t.estimated_hours * 100 ELSE NULL END) as efficiency
+          THEN CAST(t.actual_hours AS FLOAT) / CAST(t.estimated_hours AS FLOAT) * 100 ELSE NULL END) as efficiency
       FROM users u
       LEFT JOIN tasks t ON u.id = t.assignee_id 
-        AND t.created_at BETWEEN ? AND ?
+        AND DATE(t.created_at) BETWEEN ? AND ?
       GROUP BY u.id
       ORDER BY task_count DESC
-    `).bind(startDate, endDate + 'T23:59:59').all()
+    `).bind(startDate, endDate).all()
     
     return c.json({
       period: { year, month },

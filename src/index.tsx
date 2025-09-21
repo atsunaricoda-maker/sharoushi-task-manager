@@ -477,9 +477,14 @@ app.put('/api/tasks/:id', async (c) => {
 
     const currentTask = await c.env.DB.prepare('SELECT status FROM tasks WHERE id = ?').bind(id).first()
     
+    // Set completed_at if task is being completed
+    const completedAt = (status === 'completed' && currentTask?.status !== 'completed') 
+      ? `, completed_at = CURRENT_TIMESTAMP` 
+      : ''
+    
     await c.env.DB.prepare(`
       UPDATE tasks 
-      SET status = ?, progress = ?, actual_hours = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+      SET status = ?, progress = ?, actual_hours = ?, notes = ?, updated_at = CURRENT_TIMESTAMP${completedAt}
       WHERE id = ?
     `).bind(status, progress, actual_hours, notes, id).run()
 
