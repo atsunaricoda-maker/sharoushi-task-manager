@@ -12,7 +12,7 @@ reportsRouter.get('/dashboard', async (c) => {
         COUNT(*) as total_clients,
         SUM(employee_count) as total_employees,
         SUM(monthly_fee) as total_monthly_revenue
-      FROM clients WHERE is_active = 1
+      FROM clients WHERE 1=1
     `).first()
     
     // Get task statistics
@@ -132,7 +132,7 @@ reportsRouter.get('/client-activity', async (c) => {
       LEFT JOIN tasks t ON c.id = t.client_id
       LEFT JOIN projects p ON c.id = p.client_id
       LEFT JOIN subsidy_applications sa ON c.id = sa.client_id
-      WHERE c.is_active = 1
+      WHERE c.1=1
       GROUP BY c.id
       ORDER BY (COUNT(DISTINCT t.id) + COUNT(DISTINCT p.id) + COUNT(DISTINCT sa.id)) DESC
       LIMIT 50
@@ -221,30 +221,33 @@ reportsRouter.get('/monthly', async (c) => {
     // Get client breakdown
     const clientBreakdown = await c.env.DB.prepare(`
       SELECT 
-        c.id, c.name, c.company_name,
+        c.id, 
+        COALESCE(c.company_name, c.name) as client_name,
         COUNT(t.id) as task_count,
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+        ROUND(AVG(t.progress), 1) as avg_progress,
         c.monthly_fee
       FROM clients c
       LEFT JOIN tasks t ON c.id = t.client_id 
         AND DATE(t.created_at) BETWEEN ? AND ?
-      WHERE c.is_active = 1
-      GROUP BY c.id
+      WHERE c.1=1
+      GROUP BY c.id, c.name, c.company_name, c.monthly_fee
       ORDER BY task_count DESC
     `).bind(startDate, endDate).all()
     
     // Get staff breakdown
     const staffBreakdown = await c.env.DB.prepare(`
       SELECT 
-        u.id, u.name,
+        u.id, 
+        u.name as assignee_name,
         COUNT(t.id) as task_count,
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_count,
-        AVG(CASE WHEN t.status = 'completed' AND t.estimated_hours > 0 
-          THEN CAST(t.actual_hours AS FLOAT) / CAST(t.estimated_hours AS FLOAT) * 100 ELSE NULL END) as efficiency
+        ROUND(AVG(CASE WHEN t.status = 'completed' AND t.estimated_hours > 0 
+          THEN CAST(t.actual_hours AS FLOAT) / CAST(t.estimated_hours AS FLOAT) * 100 ELSE 100 END), 1) as efficiency_rate
       FROM users u
       LEFT JOIN tasks t ON u.id = t.assignee_id 
         AND DATE(t.created_at) BETWEEN ? AND ?
-      GROUP BY u.id
+      GROUP BY u.id, u.name
       ORDER BY task_count DESC
     `).bind(startDate, endDate).all()
     
@@ -252,8 +255,8 @@ reportsRouter.get('/monthly', async (c) => {
       period: { year, month },
       summary: summary || {},
       dailyTrend: dailyTrend.results || [],
-      clientBreakdown: clientBreakdown.results || [],
-      staffBreakdown: staffBreakdown.results || []
+      byClient: clientBreakdown.results || [],
+      byAssignee: staffBreakdown.results || []
     })
   } catch (error) {
     console.error('Error generating monthly report:', error)
@@ -315,7 +318,7 @@ reportsRouter.get('/client/:id', async (c) => {
     // Get project summary
     const projects = await c.env.DB.prepare(`
       SELECT 
-        id, name, status, budget,
+        id, name, status,
         start_date, end_date
       FROM projects
       WHERE client_id = ?
@@ -401,7 +404,7 @@ reportsRouter.post('/export/csv', async (c) => {
       headers = ['ID', '名前', '会社名', 'メール', '電話', '契約プラン', '従業員数', '月額料金']
       
       const clients = await c.env.DB.prepare(`
-        SELECT * FROM clients WHERE is_active = 1
+        SELECT * FROM clients WHERE 1=1
       `).all()
       
       csvData = clients.results?.map(c => [
