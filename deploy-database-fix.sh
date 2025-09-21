@@ -5,6 +5,28 @@
 
 echo "🔄 Applying database schema fixes to production..."
 
+# Preliminary checks
+echo "🔍 Preliminary checks..."
+
+# Check if wrangler is authenticated
+if ! wrangler whoami &>/dev/null; then
+    echo "❌ Wrangler is not authenticated!"
+    echo "💡 Please run: wrangler login"
+    echo "💡 Or set: export CLOUDFLARE_API_TOKEN='your-token'"
+    exit 1
+fi
+
+echo "✅ Wrangler authentication verified"
+
+# Check if database exists
+if ! wrangler d1 list | grep -q "sharoushi-task-manager-db"; then
+    echo "❌ Database 'sharoushi-task-manager-db' not found!"
+    echo "💡 Please create the database first or check the name in wrangler.jsonc"
+    exit 1
+fi
+
+echo "✅ Database 'sharoushi-task-manager-db' found"
+
 # Step 1: Apply complete schema
 echo "📋 Step 1: Applying complete database schema..."
 if wrangler d1 execute sharoushi-task-manager-db --file=./migrations/production_complete_schema.sql --remote; then
