@@ -267,6 +267,7 @@ export function getReportsPage(userName: string): string {
             const type = document.getElementById('reportType').value;
             const month = document.getElementById('reportMonth').value;
             const [year, monthNum] = month.split('-');
+            const period = document.getElementById('reportPeriod').value;
             
             try {
                 let reportData;
@@ -281,12 +282,18 @@ export function getReportsPage(userName: string): string {
                         alert('顧問先を選択してください');
                         return;
                     }
-                    const res = await axios.get(\`/api/reports/client/\${clientId}\`);
+                    const res = await axios.get(\`/api/reports/client/\${clientId}?months=\${period}\`);
                     reportData = res.data;
                     displayClientReport(reportData);
+                } else if (type === 'staff') {
+                    // Staff report - using monthly data for now
+                    const res = await axios.get(\`/api/reports/monthly?year=\${year}&month=\${monthNum}\`);
+                    reportData = res.data;
+                    displayStaffReport(reportData);
                 }
                 
                 currentReport = reportData;
+                document.getElementById('reportContent').style.display = 'block';
             } catch (error) {
                 console.error('Failed to generate report:', error);
                 alert('レポート生成に失敗しました');
@@ -398,14 +405,46 @@ export function getReportsPage(userName: string): string {
         }
         
         async function exportReport(format) {
-            const type = document.getElementById('reportType').value;
-            const month = document.getElementById('reportMonth').value;
-            const [year, monthNum] = month.split('-');
+            if (!currentReport) {
+                alert('先にレポートを生成してください');
+                return;
+            }
             
-            if (format === 'csv') {
-                window.location.href = \`/api/reports/export/csv?type=\${type}&year=\${year}&month=\${monthNum}\`;
-            } else if (format === 'pdf') {
-                alert('PDF出力機能は準備中です');
+            try {
+                if (format === 'csv') {
+                    // Create download request
+                    const response = await fetch('/api/reports/export/csv', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'tasks',
+                            period: document.getElementById('reportMonth').value
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = \`report_\${new Date().toISOString().split('T')[0]}.csv\`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        a.remove();
+                        alert('CSVファイルをダウンロードしました');
+                    } else {
+                        throw new Error('Export failed');
+                    }
+                } else if (format === 'pdf') {
+                    // PDF generation placeholder
+                    alert('PDF出力機能は実装予定です。現在はCSV出力をご利用ください。');
+                }
+            } catch (error) {
+                console.error(\`Failed to export \${format}:\`, error);
+                alert(\`\${format.toUpperCase()}エクスポートに失敗しました\`);
             }
         }
         
