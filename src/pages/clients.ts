@@ -238,7 +238,8 @@ export function getClientsPage(userName: string): string {
                 document.getElementById('totalClients').textContent = clients.length;
                 document.getElementById('activeTasks').textContent = clients.reduce((sum, c) => sum + (c.active_tasks || 0), 0);
                 document.getElementById('totalRevenue').textContent = '¥' + clients.reduce((sum, c) => sum + (c.monthly_fee || 0), 0).toLocaleString();
-                document.getElementById('avgEmployees').textContent = Math.round(clients.reduce((sum, c) => sum + (c.employee_count || 0), 0) / clients.length) || 0;
+                const totalEmployees = clients.reduce((sum, c) => sum + (c.employee_count || 0), 0);
+                document.getElementById('avgEmployees').textContent = clients.length > 0 ? Math.round(totalEmployees / clients.length) : 0;
                 
                 // Render client table
                 const tbody = document.getElementById('clientTableBody');
