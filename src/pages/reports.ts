@@ -232,6 +232,9 @@ export function getReportsPage(userName: string): string {
         let statusChart = null;
         let trendChart = null;
         
+        // Configure axios to send cookies with requests
+        axios.defaults.withCredentials = true;
+        
         // Initialize
         async function init() {
             // Set default month

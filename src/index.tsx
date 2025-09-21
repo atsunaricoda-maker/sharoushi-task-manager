@@ -44,8 +44,17 @@ const app = new Hono<{ Bindings: Bindings }>()
 // Middleware
 app.use('*', logger())
 app.use('/api/*', cors({
-  origin: ['http://localhost:3000', 'https://*.pages.dev'],
-  credentials: true
+  origin: (origin) => {
+    // Allow requests from Cloudflare Pages domains and localhost
+    if (!origin) return true // Allow same-origin requests
+    if (origin.includes('pages.dev')) return origin
+    if (origin.includes('localhost')) return origin
+    if (origin.includes('127.0.0.1')) return origin
+    return false
+  },
+  credentials: true,
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization']
 }))
 
 // Serve static files
@@ -54,21 +63,33 @@ app.use('/favicon.ico', serveStatic({ root: './public' }))
 
 // Authentication check middleware for API routes
 async function checkAuth(c: any, next: any) {
-  const token = getCookie(c, 'auth-token')
+  // Check for auth token in cookie or Authorization header
+  const token = getCookie(c, 'auth-token') || c.req.header('Authorization')?.replace('Bearer ', '')
   
   if (!token) {
-    return c.json({ error: 'Unauthorized' }, 401)
+    console.log('No auth token found in request')
+    return c.json({ error: 'Unauthorized', message: 'No auth token found' }, 401)
   }
   
   const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
   
-  if (!payload) {
-    return c.json({ error: 'Invalid token' }, 401)
+  try {
+    const payload = await verifyToken(token, jwtSecret)
+    
+    if (!payload) {
+      console.log('Token verification failed')
+      return c.json({ error: 'Invalid token', message: 'Token verification failed' }, 401)
+    }
+    
+    c.set('user', payload)
+    await next()
+  } catch (error) {
+    console.error('Auth error:', error)
+    return c.json({ 
+      error: 'Authentication failed', 
+      message: error instanceof Error ? error.message : 'Unknown error' 
+    }, 401)
   }
-  
-  c.set('user', payload)
-  await next()
 }
 
 // Public test endpoint for debugging (must be before auth middleware)
