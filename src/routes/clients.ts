@@ -141,6 +141,39 @@ clientsRouter.post('/:id/templates', async (c) => {
   }
 })
 
+// Get client contact history
+clientsRouter.get('/:id/contacts', async (c) => {
+  try {
+    const clientId = c.req.param('id')
+    
+    const contacts = await c.env.DB.prepare(`
+      SELECT 
+        id,
+        contact_type,
+        subject,
+        notes,
+        contact_date,
+        created_at
+      FROM client_contacts 
+      WHERE client_id = ? 
+      ORDER BY contact_date DESC, created_at DESC
+      LIMIT 50
+    `).bind(clientId).all()
+    
+    return c.json({
+      success: true,
+      contacts: contacts.results || []
+    })
+  } catch (error) {
+    console.error('Error fetching client contacts:', error)
+    return c.json({ 
+      success: false,
+      error: 'Failed to fetch contact history',
+      contacts: []
+    }, 500)
+  }
+})
+
 // Delete client template assignment
 clientsRouter.delete('/:id/templates/:templateId', async (c) => {
   try {
