@@ -7,22 +7,14 @@ import { generateToken, verifyToken, getUserByEmail, upsertUser } from './lib/au
 import { GeminiService } from './lib/gemini'
 import { clientsRouter } from './routes/clients'
 import { reportsRouter } from './routes/reports'
-import { notificationRouter } from './routes/notifications'
-import { gmailRouter } from './routes/gmail'
-import { calendarRouter } from './routes/calendar'
-import projectsRouter from './routes/projects'
+// Simplified router imports
 import subsidiesRouter from './routes/subsidies'
-import { adminRouter } from './routes/admin'
 import scheduleRouter from './routes/schedule'
 import { getClientsPage } from './pages/clients'
 import { getReportsPage } from './pages/reports'
 import { getSettingsPage } from './pages/settings'
-import { getGmailPage } from './pages/gmail'
-import { getCalendarPage } from './pages/calendar'
-import { getProjectsPage } from './pages/projects'
+// Simplified imports - removed complex features
 import { getSubsidiesPage } from './pages/subsidies'
-import { subsidyMasterPage } from './pages/subsidy-master'
-import { getAdminDashboardPage } from './pages/admin-dashboard'
 import { getSchedulePage } from './pages/schedule'
 import { getTasksPage } from './pages/tasks'
 
@@ -243,28 +235,17 @@ app.get('/dev-login', (c) => {
 app.route('/api/schedule', scheduleRouter)
 app.route('/api/calendar', scheduleRouter) // Alias for calendar functionality
 
-// Apply auth middleware to protected routes
+// Simplified auth middleware - only for core functions
 app.use('/api/tasks/*', checkAuth)
 app.use('/api/clients/*', checkAuth)
 app.use('/api/users/*', checkAuth)
 app.use('/api/dashboard/*', checkAuth)
-app.use('/api/ai/*', checkAuth)
-// app.use('/api/reports/*', checkAuth)  // Temporarily disabled for testing
-app.use('/api/notifications/*', checkAuth)
-app.use('/api/gmail/*', checkAuth)
-app.use('/api/calendar/*', checkAuth)
-app.use('/api/projects/*', checkAuth)
 app.use('/api/subsidies/*', checkAuth)
-app.use('/api/admin/*', checkAuth)
-// Note: schedule auth is handled within the router for more flexibility
+
+// Core API routes only
 app.route('/api/clients', clientsRouter)
 app.route('/api/reports', reportsRouter)
-app.route('/api/notifications', notificationRouter)
-app.route('/api/gmail', gmailRouter)
-app.route('/api/calendar', calendarRouter)
-app.route('/api/projects', projectsRouter)
 app.route('/api/subsidies', subsidiesRouter)
-app.route('/api/admin', adminRouter)
 
 // Debug endpoint to check database tables (public)
 app.get('/api/debug/tables', async (c) => {
@@ -1144,65 +1125,54 @@ app.get('/', async (c) => {
             </h3>
             <p class="text-gray-600 text-center mb-8">やりたいことをクリックしてください</p>
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- 今日のやること -->
-                <a href="/tasks" class="group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 border-2 border-transparent hover:border-blue-300 shadow-md hover:shadow-lg">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- 業務管理 (統合版) -->
+                <a href="/tasks" class="group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 border-2 border-transparent hover:border-blue-300 shadow-lg hover:shadow-xl">
                     <div class="text-center">
-                        <div class="bg-blue-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                            <i class="fas fa-list-check text-white text-2xl"></i>
+                        <div class="bg-blue-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-clipboard-list text-white text-3xl"></i>
                         </div>
-                        <h4 class="text-xl font-bold text-gray-900 mb-2">今日のやること</h4>
-                        <p class="text-gray-600 text-sm">今日やる仕事の確認・完了チェック</p>
+                        <h4 class="text-2xl font-bold text-gray-900 mb-3">業務管理</h4>
+                        <p class="text-gray-600">今日のやること・予定・進捗をまとめて管理</p>
+                        <div class="mt-4 flex justify-center space-x-4 text-sm text-gray-500">
+                            <span><i class="fas fa-tasks mr-1"></i>タスク</span>
+                            <span><i class="fas fa-calendar mr-1"></i>予定</span>
+                            <span><i class="fas fa-chart-line mr-1"></i>進捗</span>
+                        </div>
                     </div>
                 </a>
                 
-                <!-- 顧問先 -->
-                <a href="/clients" class="group bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 hover:from-green-100 hover:to-green-200 transition-all duration-200 border-2 border-transparent hover:border-green-300 shadow-md hover:shadow-lg">
+                <!-- 顧問先管理 -->
+                <a href="/clients" class="group bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 hover:from-green-100 hover:to-green-200 transition-all duration-200 border-2 border-transparent hover:border-green-300 shadow-lg hover:shadow-xl">
                     <div class="text-center">
-                        <div class="bg-green-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                            <i class="fas fa-users text-white text-2xl"></i>
+                        <div class="bg-green-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-building text-white text-3xl"></i>
                         </div>
-                        <h4 class="text-xl font-bold text-gray-900 mb-2">お客様管理</h4>
-                        <p class="text-gray-600 text-sm">顧問先の情報確認・連絡先管理</p>
-                    </div>
-                </a>
-                
-                <!-- 予定表 -->
-                <a href="/calendar" class="group bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 hover:from-purple-100 hover:to-purple-200 transition-all duration-200 border-2 border-transparent hover:border-purple-300 shadow-md hover:shadow-lg">
-                    <div class="text-center">
-                        <div class="bg-purple-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                            <i class="fas fa-calendar-days text-white text-2xl"></i>
+                        <h4 class="text-2xl font-bold text-gray-900 mb-3">顧問先管理</h4>
+                        <p class="text-gray-600">お客様の基本情報・連絡履歴・契約状況</p>
+                        <div class="mt-4 flex justify-center space-x-4 text-sm text-gray-500">
+                            <span><i class="fas fa-address-book mr-1"></i>連絡先</span>
+                            <span><i class="fas fa-handshake mr-1"></i>契約</span>
+                            <span><i class="fas fa-history mr-1"></i>履歴</span>
                         </div>
-                        <h4 class="text-xl font-bold text-gray-900 mb-2">予定表</h4>
-                        <p class="text-gray-600 text-sm">面談・締切日の確認・予定追加</p>
                     </div>
                 </a>
             </div>
             
-            <!-- その他の機能 -->
-            <details class="mt-8">
-                <summary class="cursor-pointer text-gray-600 hover:text-gray-800 text-center py-2 border-t border-gray-200 pt-4">
-                    <i class="fas fa-chevron-down mr-2"></i>その他の便利機能
-                </summary>
-                <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <a href="/reports" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i class="fas fa-chart-simple text-orange-600 text-lg mb-2 block"></i>
-                        <span class="text-sm text-gray-700">月次まとめ</span>
-                    </a>
-                    <a href="/subsidies" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i class="fas fa-money-bill text-yellow-600 text-lg mb-2 block"></i>
-                        <span class="text-sm text-gray-700">助成金手続き</span>
-                    </a>
-                    <a href="/projects" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i class="fas fa-folder text-indigo-600 text-lg mb-2 block"></i>
-                        <span class="text-sm text-gray-700">仕事の進捗</span>
-                    </a>
-                    <a href="/settings" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i class="fas fa-gear text-gray-600 text-lg mb-2 block"></i>
-                        <span class="text-sm text-gray-700">設定</span>
-                    </a>
-                </div>
-            </details>
+            <!-- 助成金管理 (社労士特化機能) -->
+            <div class="mt-8">
+                <a href="/subsidies" class="block group bg-gradient-to-r from-amber-50 to-yellow-100 rounded-xl p-6 hover:from-amber-100 hover:to-yellow-200 transition-all duration-200 border-2 border-transparent hover:border-yellow-300 shadow-lg hover:shadow-xl">
+                    <div class="flex items-center justify-center">
+                        <div class="bg-yellow-600 rounded-full w-16 h-16 flex items-center justify-center mr-6 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-coins text-white text-2xl"></i>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-bold text-gray-900 mb-2">助成金管理</h4>
+                            <p class="text-gray-600">申請から受給まで一括管理</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
         </div>
 
         <!-- 簡単アクション -->
@@ -1625,34 +1595,8 @@ app.get('/settings', async (c) => {
   return c.html(getSettingsPage(user.name, user.id))
 })
 
-// Gmail page
-app.get('/gmail', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(getGmailPage(payload.name))
-})
-
-// Calendar page (unified with schedule functionality)
+// Unified Calendar/Schedule page (core feature)
 app.get('/calendar', async (c) => {
-  // Development environment bypass (only for local testing)
-  const environment = c.env.ENVIRONMENT || 'production'
-  if (environment === 'development') {
-    const testUser = { name: '田中 太郎', role: 'admin' }
-    return c.html(getSchedulePage(testUser.name, testUser.role))
-  }
-  
-  // Production authentication
   const token = getCookie(c, 'auth-token')
   
   if (!token) {
@@ -1666,29 +1610,16 @@ app.get('/calendar', async (c) => {
     return c.redirect('/login')
   }
   
-  // Use schedule page implementation for calendar (unified functionality)
   return c.html(getSchedulePage(payload.name, payload.role || 'user'))
 })
 
-// Projects page
-app.get('/projects', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(getProjectsPage(payload.name))
-})
+// Redirect old routes to simplified structure
+app.get('/schedule', async (c) => c.redirect('/calendar'))
+app.get('/projects', async (c) => c.redirect('/tasks'))
+app.get('/gmail', async (c) => c.redirect('/'))
+app.get('/admin', async (c) => c.redirect('/'))
 
-// Subsidies page
+// Subsidies page (core feature for sharoushi offices)
 app.get('/subsidies', async (c) => {
   const token = getCookie(c, 'auth-token')
   
@@ -1704,55 +1635,6 @@ app.get('/subsidies', async (c) => {
   }
   
   return c.html(getSubsidiesPage(payload.name))
-})
-
-// Subsidy Master Management page
-app.get('/subsidy-master', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(subsidyMasterPage)
-})
-
-// Test route to verify routing is working
-app.get('/test-schedule', async (c) => {
-  return c.text('Test schedule route is working!')
-})
-
-// Schedule page - redirect to calendar (unified functionality)
-app.get('/schedule', async (c) => {
-  return c.redirect('/calendar')
-})
-
-// Admin Dashboard page
-app.get('/admin', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  // 簡易的な管理者チェック（本番環境では適切な権限管理を実装）
-  // TODO: roleベースの権限管理を実装
-  
-  return c.html(getAdminDashboardPage(payload.name))
 })
 
 // Scheduled event handler for Cron Triggers
