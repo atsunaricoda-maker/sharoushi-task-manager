@@ -13,6 +13,39 @@ export function getClientsPage(userName: string): string {
         .modal.active { display: flex; align-items: center; justify-content: center; }
         .slide-panel { transform: translateX(100%); transition: transform 0.3s ease; }
         .slide-panel.active { transform: translateX(0); }
+        
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1050;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+        .toast.show { transform: translateX(0); }
+        .toast.success { background-color: #10b981; }
+        .toast.error { background-color: #ef4444; }
+        .toast.info { background-color: #3b82f6; }
+        .toast.warning { background-color: #f59e0b; }
+        
+        /* Loading spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -101,15 +134,60 @@ export function getClientsPage(userName: string): string {
             </div>
         </div>
 
+        <!-- Search and Filter Section -->
+        <div class="bg-white rounded-lg shadow mb-6">
+            <div class="px-6 py-4 border-b">
+                <h3 class="text-md font-semibold text-gray-900 mb-4">検索・絞り込み</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">顧問先名検索</label>
+                        <input type="text" id="searchInput" placeholder="顧問先名または会社名で検索" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               oninput="filterClients()">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">契約プラン</label>
+                        <select id="contractPlanFilter" onchange="filterClients()" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">すべて</option>
+                            <option value="ライトプラン">ライトプラン</option>
+                            <option value="スタンダードプラン">スタンダードプラン</option>
+                            <option value="プレミアムプラン">プレミアムプラン</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">従業員数</label>
+                        <select id="employeeCountFilter" onchange="filterClients()" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">すべて</option>
+                            <option value="1-10">1-10人</option>
+                            <option value="11-50">11-50人</option>
+                            <option value="51-100">51-100人</option>
+                            <option value="101+">101人以上</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="clearFilters()" 
+                                class="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">
+                            <i class="fas fa-eraser mr-2"></i>フィルタークリア
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Client List -->
         <div class="bg-white rounded-lg shadow">
             <div class="px-6 py-4 border-b flex justify-between items-center">
-                <h2 class="text-lg font-semibold text-gray-900">顧問先一覧</h2>
+                <div class="flex items-center space-x-4">
+                    <h2 class="text-lg font-semibold text-gray-900">顧問先一覧</h2>
+                    <span id="clientCount" class="text-sm text-gray-500">（0件）</span>
+                </div>
                 <div class="flex space-x-2">
                     <button onclick="openNewClientModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
                         <i class="fas fa-plus mr-2"></i>新規顧問先
                     </button>
-                    <button class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50">
+                    <button onclick="exportClients()" class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50">
                         <i class="fas fa-download mr-2"></i>エクスポート
                     </button>
                 </div>
@@ -228,52 +306,174 @@ export function getClientsPage(userName: string): string {
 
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
     <script>
+        let allClients = [];
+        let filteredClients = [];
+        
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = \`toast \${type}\`;
+            toast.innerHTML = \`
+                <div class="flex items-center justify-between">
+                    <span>\${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            \`;
+            
+            document.body.appendChild(toast);
+            
+            // Show animation
+            setTimeout(() => toast.classList.add('show'), 100);
+            
+            // Auto remove
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+        
+        // Loading state helper
+        function setLoading(element, isLoading) {
+            if (isLoading) {
+                element.disabled = true;
+                element.innerHTML = '<span class="loading-spinner"></span> 処理中...';
+            } else {
+                element.disabled = false;
+                // Restore original content (will be handled by caller)
+            }
+        }
+        
         // Load clients on page load
         async function loadClients() {
             try {
                 const res = await axios.get('/api/clients');
-                const clients = res.data.clients;
+                allClients = res.data.clients;
+                filteredClients = [...allClients];
                 
-                // Update stats
-                document.getElementById('totalClients').textContent = clients.length;
-                document.getElementById('activeTasks').textContent = clients.reduce((sum, c) => sum + (c.active_tasks || 0), 0);
-                document.getElementById('totalRevenue').textContent = '¥' + clients.reduce((sum, c) => sum + (c.monthly_fee || 0), 0).toLocaleString();
-                const totalEmployees = clients.reduce((sum, c) => sum + (c.employee_count || 0), 0);
-                document.getElementById('avgEmployees').textContent = clients.length > 0 ? Math.round(totalEmployees / clients.length) : 0;
+                updateStats();
+                renderClientsTable();
+                updateClientCount();
                 
-                // Render client table
-                const tbody = document.getElementById('clientTableBody');
-                tbody.innerHTML = clients.map(client => \`
-                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="showClientDetail(\${client.id})">
-                        <td class="px-6 py-4">
-                            <div class="text-sm font-medium text-gray-900">\${client.name}</div>
-                            <div class="text-sm text-gray-500">\${client.primary_contact_name || '-'}</div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">
-                                \${client.contract_plan || '未設定'}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 text-sm text-gray-900">\${client.employee_count || 0}名</td>
-                        <td class="px-6 py-4 text-sm text-gray-900">¥\${(client.monthly_fee || 0).toLocaleString()}</td>
-                        <td class="px-6 py-4">
-                            <span class="text-sm font-medium \${client.active_tasks > 0 ? 'text-green-600' : 'text-gray-500'}">
-                                \${client.active_tasks || 0}件
-                            </span>
-                        </td>
-                        <td class="px-6 py-4">
-                            <button onclick="event.stopPropagation(); editClient(\${client.id})" class="text-blue-600 hover:text-blue-900 mr-3">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button onclick="event.stopPropagation(); generateTasksForClient(\${client.id})" class="text-purple-600 hover:text-purple-900">
-                                <i class="fas fa-magic"></i>
-                            </button>
-                        </td>
-                    </tr>
-                \`).join('');
             } catch (error) {
                 console.error('Failed to load clients:', error);
+                showToast('顧問先の読み込みに失敗しました', 'error');
             }
+        }
+        
+        // Update statistics
+        function updateStats() {
+            const clients = filteredClients;
+            document.getElementById('totalClients').textContent = clients.length;
+            document.getElementById('activeTasks').textContent = clients.reduce((sum, c) => sum + (c.active_tasks || 0), 0);
+            document.getElementById('totalRevenue').textContent = '¥' + clients.reduce((sum, c) => sum + (c.monthly_fee || 0), 0).toLocaleString();
+            const totalEmployees = clients.reduce((sum, c) => sum + (c.employee_count || 0), 0);
+            document.getElementById('avgEmployees').textContent = clients.length > 0 ? Math.round(totalEmployees / clients.length) : 0;
+        }
+        
+        // Render clients table
+        function renderClientsTable() {
+            const tbody = document.getElementById('clientTableBody');
+            
+            if (filteredClients.length === 0) {
+                tbody.innerHTML = \`
+                    <tr>
+                        <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                            <i class="fas fa-search mb-2 text-2xl"></i>
+                            <div>該当する顧問先が見つかりません</div>
+                            <div class="text-sm">検索条件を変更してください</div>
+                        </td>
+                    </tr>
+                \`;
+                return;
+            }
+            
+            tbody.innerHTML = filteredClients.map(client => \`
+                <tr class="hover:bg-gray-50 cursor-pointer" onclick="showClientDetail(\${client.id})">
+                    <td class="px-6 py-4">
+                        <div class="text-sm font-medium text-gray-900">\${client.name}</div>
+                        <div class="text-sm text-gray-500">\${client.company_name || '-'}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">
+                            \${client.contract_plan || '未設定'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">\${client.employee_count || 0}名</td>
+                    <td class="px-6 py-4 text-sm text-gray-900">¥\${(client.monthly_fee || 0).toLocaleString()}</td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm font-medium \${client.active_tasks > 0 ? 'text-green-600' : 'text-gray-500'}">
+                            \${client.active_tasks || 0}件
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <button onclick="event.stopPropagation(); editClient(\${client.id})" 
+                                class="text-blue-600 hover:text-blue-900 mr-2" title="編集">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="event.stopPropagation(); generateTasksForClient(\${client.id})" 
+                                class="text-purple-600 hover:text-purple-900 mr-2" title="タスク生成">
+                            <i class="fas fa-magic"></i>
+                        </button>
+                        <button onclick="event.stopPropagation(); deleteClient(\${client.id}, '\${client.name.replace(/'/g, "\\'")}')" 
+                                class="text-red-600 hover:text-red-900" title="削除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            \`).join('');
+        }
+        
+        // Update client count display
+        function updateClientCount() {
+            document.getElementById('clientCount').textContent = \`（\${filteredClients.length}件）\`;
+        }
+        
+        // Filter clients based on search and filter inputs
+        function filterClients() {
+            const searchText = document.getElementById('searchInput').value.toLowerCase();
+            const contractPlan = document.getElementById('contractPlanFilter').value;
+            const employeeRange = document.getElementById('employeeCountFilter').value;
+            
+            filteredClients = allClients.filter(client => {
+                // Search filter
+                const matchesSearch = !searchText || 
+                    client.name.toLowerCase().includes(searchText) ||
+                    (client.company_name && client.company_name.toLowerCase().includes(searchText));
+                
+                // Contract plan filter
+                const matchesContract = !contractPlan || client.contract_plan === contractPlan;
+                
+                // Employee count filter
+                let matchesEmployeeCount = true;
+                if (employeeRange) {
+                    const empCount = client.employee_count || 0;
+                    switch(employeeRange) {
+                        case '1-10': matchesEmployeeCount = empCount >= 1 && empCount <= 10; break;
+                        case '11-50': matchesEmployeeCount = empCount >= 11 && empCount <= 50; break;
+                        case '51-100': matchesEmployeeCount = empCount >= 51 && empCount <= 100; break;
+                        case '101+': matchesEmployeeCount = empCount > 100; break;
+                    }
+                }
+                
+                return matchesSearch && matchesContract && matchesEmployeeCount;
+            });
+            
+            updateStats();
+            renderClientsTable();
+            updateClientCount();
+        }
+        
+        // Clear all filters
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('contractPlanFilter').value = '';
+            document.getElementById('employeeCountFilter').value = '';
+            filteredClients = [...allClients];
+            updateStats();
+            renderClientsTable();
+            updateClientCount();
         }
         
         async function showClientDetail(clientId) {
@@ -351,6 +551,11 @@ export function getClientsPage(userName: string): string {
         
         document.getElementById('newClientForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            
+            setLoading(submitButton, true);
+            
             const formData = new FormData(e.target);
             const clientData = Object.fromEntries(formData);
             
@@ -358,11 +563,70 @@ export function getClientsPage(userName: string): string {
                 await axios.post('/api/clients', clientData);
                 closeNewClientModal();
                 await loadClients();
-                alert('顧問先を登録しました');
+                showToast('顧問先を登録しました', 'success');
             } catch (error) {
-                alert('顧問先の登録に失敗しました');
+                console.error('Error creating client:', error);
+                showToast(error.response?.data?.error || '顧問先の登録に失敗しました', 'error');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
             }
         });
+        
+        // Delete client function
+        async function deleteClient(clientId, clientName) {
+            if (!confirm(\`顧問先「\${clientName}」を削除してもよろしいですか？\\n\\nこの操作は取り消せません。\`)) {
+                return;
+            }
+            
+            try {
+                const response = await axios.delete(\`/api/clients/\${clientId}\`);
+                await loadClients();
+                showToast(response.data.message || '顧問先を削除しました', 'success');
+            } catch (error) {
+                console.error('Error deleting client:', error);
+                const errorMsg = error.response?.data?.error || '顧問先の削除に失敗しました';
+                
+                if (error.response?.data?.activeTaskCount > 0) {
+                    showToast(\`削除できません：アクティブなタスクが\${error.response.data.activeTaskCount}件あります\`, 'warning', 5000);
+                } else if (error.response?.data?.futureScheduleCount > 0) {
+                    showToast(\`削除できません：将来のスケジュールが\${error.response.data.futureScheduleCount}件あります\`, 'warning', 5000);
+                } else {
+                    showToast(errorMsg, 'error');
+                }
+            }
+        }
+        
+        // Export clients to CSV
+        function exportClients() {
+            const csvContent = [
+                ['顧問先名', '会社名', 'メールアドレス', '電話番号', '住所', '契約プラン', '従業員数', '月額顧問料', 'アクティブタスク', '備考'].join(','),
+                ...filteredClients.map(client => [
+                    \`"\${client.name || ''}"\`,
+                    \`"\${client.company_name || ''}"\`,
+                    \`"\${client.email || ''}"\`,
+                    \`"\${client.phone || ''}"\`,
+                    \`"\${client.address || ''}"\`,
+                    \`"\${client.contract_plan || ''}"\`,
+                    client.employee_count || 0,
+                    client.monthly_fee || 0,
+                    client.active_tasks || 0,
+                    \`"\${client.notes || ''}"\`
+                ].join(','))
+            ].join('\\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', \`顧問先一覧_\${new Date().toLocaleDateString('ja-JP').replace(/\\//g, '')}.csv\`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showToast('CSVファイルをダウンロードしました', 'success');
+        }
         
         async function editClient(clientId) {
             try {
@@ -391,13 +655,13 @@ export function getClientsPage(userName: string): string {
                         await axios.put(\`/api/clients/\${clientId}\`, clientData);
                         closeNewClientModal();
                         await loadClients();
-                        alert('顧問先情報を更新しました');
+                        showToast('顧問先情報を更新しました', 'success');
                         
                         // Reset form to original create behavior
                         resetFormToCreateMode();
                     } catch (error) {
                         console.error('Failed to update client:', error);
-                        alert('顧問先の更新に失敗しました');
+                        showToast('顧問先の更新に失敗しました', 'error');
                     }
                 };
                 
@@ -408,7 +672,7 @@ export function getClientsPage(userName: string): string {
                 openNewClientModal();
             } catch (error) {
                 console.error('Failed to load client for editing:', error);
-                alert('顧問先情報の取得に失敗しました');
+                showToast('顧問先情報の取得に失敗しました', 'error');
             }
         }
         
@@ -427,9 +691,9 @@ export function getClientsPage(userName: string): string {
                     await axios.post('/api/clients', clientData);
                     closeNewClientModal();
                     await loadClients();
-                    alert('顧問先を登録しました');
+                    showToast('顧問先を登録しました', 'success');
                 } catch (error) {
-                    alert('顧問先の登録に失敗しました');
+                    showToast('顧問先の登録に失敗しました', 'error');
                 }
             };
         }
@@ -442,9 +706,10 @@ export function getClientsPage(userName: string): string {
                         client_id: clientId,
                         month: month
                     });
-                    alert(res.data.message);
+                    showToast(res.data.message || 'タスクを生成しました', 'success');
                 } catch (error) {
-                    alert('タスク生成に失敗しました');
+                    console.error('Error generating tasks:', error);
+                    showToast('タスク生成に失敗しました', 'error');
                 }
             }
         }

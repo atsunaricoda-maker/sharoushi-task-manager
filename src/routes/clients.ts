@@ -161,3 +161,62 @@ clientsRouter.delete('/:id/templates/:templateId', async (c) => {
     return c.json({ error: 'Failed to remove template' }, 500)
   }
 })
+
+// Delete client (with safety checks)
+clientsRouter.delete('/:id', async (c) => {
+  try {
+    const clientId = c.req.param('id')
+    
+    // Check if client exists
+    const client = await c.env.DB.prepare(`
+      SELECT * FROM clients WHERE id = ?
+    `).bind(clientId).first()
+    
+    if (!client) {
+      return c.json({ error: '顧問先が見つかりません' }, 404)
+    }
+    
+    // Check for active tasks
+    const activeTasks = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM tasks 
+      WHERE client_id = ? AND status != 'completed'
+    `).bind(clientId).first()
+    
+    if (activeTasks && activeTasks.count > 0) {
+      return c.json({ 
+        error: 'アクティブなタスクがある顧問先は削除できません。先にタスクを完了または削除してください。',
+        activeTaskCount: activeTasks.count
+      }, 400)
+    }
+    
+    // Check for future schedule entries
+    const futureSchedules = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM schedule_entries 
+      WHERE client_id = ? AND start_time > datetime('now')
+    `).bind(clientId).first()
+    
+    if (futureSchedules && futureSchedules.count > 0) {
+      return c.json({ 
+        error: '将来のスケジュールがある顧問先は削除できません。先にスケジュールを削除してください。',
+        futureScheduleCount: futureSchedules.count
+      }, 400)
+    }
+    
+    // Proceed with deletion
+    // Delete related records first
+    await c.env.DB.prepare(`DELETE FROM client_task_templates WHERE client_id = ?`).bind(clientId).run()
+    await c.env.DB.prepare(`DELETE FROM tasks WHERE client_id = ?`).bind(clientId).run()
+    await c.env.DB.prepare(`DELETE FROM schedule_entries WHERE client_id = ?`).bind(clientId).run()
+    
+    // Delete the client
+    await c.env.DB.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId).run()
+    
+    return c.json({ 
+      success: true,
+      message: '顧問先を削除しました'
+    })
+  } catch (error) {
+    console.error('Error deleting client:', error)
+    return c.json({ error: '顧問先の削除に失敗しました' }, 500)
+  }
+})
