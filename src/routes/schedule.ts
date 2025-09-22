@@ -17,13 +17,17 @@ async function checkScheduleAuth(c: any) {
     const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
     const payload = await verifyToken(token, jwtSecret)
     
+    console.log('JWT payload:', payload)
+    
     if (!payload || !payload.sub) {
-      return c.json({ error: 'Unauthorized', message: 'Invalid token' }, 401)
+      console.error('Invalid token payload:', payload)
+      return c.json({ error: 'Unauthorized', message: 'Invalid token', debug: 'No sub field in JWT' }, 401)
     }
 
     // Set user info for use in route handlers (sub contains the user id)
     c.set('userId', payload.sub)
     c.set('user', payload)
+    console.log('Auth successful, userId set to:', payload.sub)
     return null // No error
   } catch (error) {
     console.error('Auth error:', error)
@@ -121,12 +125,22 @@ scheduleRouter.post('/', async (c) => {
     
     // Get user_id from auth context
     const userId = c.get('userId')
+    const user = c.get('user')
     
-    console.log('Creating schedule entry:', { title, entry_type, start_time, userId })
+    console.log('Creating schedule entry:', { title, entry_type, start_time, userId, userContext: user })
     
     // Validate required fields
     if (!title || !start_time) {
       return c.json({ error: 'タイトルと開始時刻は必須です' }, 400)
+    }
+    
+    // Validate userId is available
+    if (!userId) {
+      console.error('No userId found in auth context:', { user })
+      return c.json({ 
+        error: 'ユーザー情報が見つかりません', 
+        debug: 'No userId in auth context'
+      }, 400)
     }
     
     // Try to create schedule entry, but handle table not existing
