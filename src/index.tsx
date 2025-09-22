@@ -158,40 +158,6 @@ app.get('/api/dev-auth', async (c) => {
     }, 500)
   }
 })
-  
-  try {
-    const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-    const testUser = {
-      id: 1,
-      email: 'tanaka@sharoushi.com', 
-      name: '田中 太郎',
-      role: 'admin'
-    }
-    
-    const token = await generateToken(testUser, jwtSecret)
-    
-    // Set cookie for testing
-    setCookie(c, 'auth-token', token, {
-      httpOnly: true,
-      secure: false, // Allow in dev environment only
-      sameSite: 'Lax',
-      maxAge: 24 * 60 * 60 // 24 hours
-    })
-    
-    return c.json({
-      success: true,
-      message: 'Development auth token generated and set as cookie',
-      token: token,
-      user: testUser,
-      redirect: '/'
-    })
-  } catch (error) {
-    return c.json({
-      error: 'Failed to generate dev auth token',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
 
 // Development login page (TEMPORARILY ENABLED FOR TESTING)
 app.get('/dev-login', (c) => {

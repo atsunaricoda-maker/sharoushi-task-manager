@@ -1,0 +1,65 @@
+name: 🚀 Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: a2beb7b88e3c7a9888e6ec0849498ce7
+  PROJECT_NAME: sharoushi-task-manager
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: 🏗️ Build and Deploy
+    
+    steps:
+      - name: 📂 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 🔧 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build project
+        run: npm run build
+
+      - name: 🚀 Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ env.PROJECT_NAME }}
+
+  database-migration:
+    runs-on: ubuntu-latest
+    name: 🗄️ Database Migration
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📂 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 🔧 Install dependencies
+        run: npm ci
+
+      - name: 🗄️ Apply database migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply sharoushi-task-manager-db --remote
