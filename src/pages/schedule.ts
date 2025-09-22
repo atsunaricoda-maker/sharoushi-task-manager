@@ -345,13 +345,8 @@ export function getSchedulePage(userName: string, userRole: string): string {
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
-            // Try development auth first (only works in dev environment)
-            try {
-                await axios.get('/api/health?dev-auth=true');
-                console.log('Development authentication completed');
-            } catch (error) {
-                console.warn('Dev auth not available (production environment)');
-            }
+            // Development auth disabled in production - use Google OAuth only
+            console.log('Initializing schedule page with production authentication');
             
             loadClients();
             loadScheduleEvents();

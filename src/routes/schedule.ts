@@ -19,6 +19,16 @@ async function checkScheduleAuth(c: any) {
     
     console.log('JWT payload:', payload)
     
+    // Reject development tokens in production
+    if (payload?.email === 'tanaka@sharoushi.com' && payload?.name === '田中 太郎') {
+      console.error('Development token detected in production, rejecting')
+      return c.json({ 
+        error: 'Unauthorized', 
+        message: 'Development tokens are not allowed in production. Please login with Google OAuth.', 
+        debug: 'Dev token rejected' 
+      }, 401)
+    }
+    
     if (!payload || !payload.sub) {
       console.error('Invalid token payload:', payload)
       return c.json({ error: 'Unauthorized', message: 'Invalid token', debug: 'No sub field in JWT' }, 401)

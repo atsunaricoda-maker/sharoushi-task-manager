@@ -128,18 +128,13 @@ app.get('/test-early', (c) => {
   return c.text('Early test route is working!')
 })
 
-// Development auth token generator (LOCAL DEVELOPMENT ONLY)
+// Development auth token generator (COMPLETELY DISABLED IN PRODUCTION)
 app.get('/api/dev-auth', async (c) => {
-  // 🚨 SECURITY: Only allow in local development environment
-  const environment = c.env.ENVIRONMENT || 'production'
-  const isLocal = c.req.url.includes('localhost') || c.req.url.includes('127.0.0.1') || environment === 'development'
-  
-  if (!isLocal) {
-    return c.json({ 
-      error: 'Forbidden', 
-      message: 'Development authentication is only available in local development environment' 
-    }, 403)
-  }
+  // 🚨 SECURITY: Completely disabled in production
+  return c.json({ 
+    error: 'Forbidden', 
+    message: 'Development authentication is disabled in production. Please use Google OAuth.' 
+  }, 403)
   
   try {
     const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
@@ -298,25 +293,19 @@ app.get('/api/health', async (c) => {
   try {
     const result = await c.env.DB.prepare('SELECT 1 as test').first()
     
-    // Check if dev-auth parameter is present (LOCAL DEVELOPMENT ONLY)
+    // Check if dev-auth parameter is present (COMPLETELY DISABLED IN PRODUCTION)
     const devAuth = c.req.query('dev-auth')
     if (devAuth === 'true') {
-      // 🚨 SECURITY: Only allow in local development environment
-      const environment = c.env.ENVIRONMENT || 'production'
-      const isLocal = c.req.url.includes('localhost') || c.req.url.includes('127.0.0.1') || environment === 'development'
-      
-      if (!isLocal) {
-        return c.json({ 
-          status: 'healthy',
-          environment: c.env.ENVIRONMENT || 'production',
-          database: result ? 'connected' : 'disconnected',
-          timestamp: new Date().toISOString(),
-          devAuth: {
-            success: false,
-            message: 'Development authentication is only available in local development environment'
-          }
-        })
-      }
+      return c.json({ 
+        status: 'healthy',
+        environment: c.env.ENVIRONMENT || 'production',
+        database: result ? 'connected' : 'disconnected',
+        timestamp: new Date().toISOString(),
+        devAuth: {
+          success: false,
+          message: 'Development authentication is completely disabled in production. Please use Google OAuth.'
+        }
+      })
       
       const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
       const testUser = {
