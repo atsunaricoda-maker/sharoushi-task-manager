@@ -21,6 +21,7 @@ import { getGmailPage } from './pages/gmail'
 import { getCalendarPage } from './pages/calendar'
 import { getProjectsPage } from './pages/projects'
 import { getSubsidiesPage } from './pages/subsidies'
+import { subsidyMasterPage } from './pages/subsidy-master'
 import { getAdminDashboardPage } from './pages/admin-dashboard'
 import { getSchedulePage } from './pages/schedule'
 import { getTasksPage } from './pages/tasks'
@@ -1096,7 +1097,11 @@ app.get('/', async (c) => {
                 </a>
                 <a href="/subsidies" class="flex items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
                     <i class="fas fa-hand-holding-usd text-yellow-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">助成金管理</span>
+                    <span class="text-gray-900 font-medium">助成金申請管理</span>
+                </a>
+                <a href="/subsidy-master" class="flex items-center p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
+                    <i class="fas fa-database text-orange-600 text-xl mr-3"></i>
+                    <span class="text-gray-900 font-medium">助成金マスター管理</span>
                 </a>
                 <a href="/schedule" class="flex items-center p-4 bg-cyan-50 rounded-lg hover:bg-cyan-100 transition-colors">
                     <i class="fas fa-calendar-alt text-cyan-600 text-xl mr-3"></i>
@@ -1592,6 +1597,24 @@ app.get('/subsidies', async (c) => {
   }
   
   return c.html(getSubsidiesPage(payload.name))
+})
+
+// Subsidy Master Management page
+app.get('/subsidy-master', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(subsidyMasterPage)
 })
 
 // Schedule page

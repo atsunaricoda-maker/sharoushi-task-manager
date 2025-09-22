@@ -449,6 +449,738 @@ subsidiesRouter.delete('/applications/:id', async (c) => {
   }
 })
 
+// ===== 助成金マスター管理エンドポイント =====
+
+// Get all subsidies master data
+subsidiesRouter.get('/master', async (c) => {
+  try {
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const page = parseInt(c.req.query('page') || '1')
+    const limit = parseInt(c.req.query('limit') || '20')
+    const search = c.req.query('search') || ''
+    const category = c.req.query('category') || ''
+    const status = c.req.query('status') || 'active'
+    const offset = (page - 1) * limit
+    
+    let whereConditions = []
+    let params = []
+    
+    if (search) {
+      whereConditions.push('(s.name LIKE ? OR s.description LIKE ? OR s.managing_organization LIKE ?)')
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`)
+    }
+    
+    if (category) {
+      whereConditions.push('s.category = ?')
+      params.push(category)
+    }
+    
+    if (status === 'active') {
+      whereConditions.push('s.is_active = 1')
+    } else if (status === 'inactive') {
+      whereConditions.push('s.is_active = 0')
+    }
+    
+    const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : ''
+    
+    // Get subsidies with application count
+    const subsidies = await c.env.DB.prepare(`
+      SELECT s.*,
+        COUNT(DISTINCT sa.id) as application_count,
+        COUNT(DISTINCT CASE WHEN sa.status IN ('approved', 'received') THEN sa.id END) as success_count
+      FROM subsidies s
+      LEFT JOIN subsidy_applications sa ON s.id = sa.subsidy_id
+      ${whereClause}
+      GROUP BY s.id
+      ORDER BY s.created_at DESC
+      LIMIT ? OFFSET ?
+    `).bind(...params, limit, offset).all()
+    
+    // Get total count
+    const totalResult = await c.env.DB.prepare(`
+      SELECT COUNT(DISTINCT s.id) as total
+      FROM subsidies s
+      ${whereClause}
+    `).bind(...params).first()
+    
+    // Get categories for filter
+    const categories = await c.env.DB.prepare(`
+      SELECT DISTINCT category
+      FROM subsidies
+      WHERE category IS NOT NULL AND category != ''
+      ORDER BY category
+    `).all()
+    
+    return c.json({
+      success: true,
+      subsidies: subsidies.results || [],
+      total: totalResult?.total || 0,
+      page,
+      limit,
+      categories: (categories.results || []).map(cat => cat.category)
+    })
+  } catch (error) {
+    console.error('Error getting subsidies master:', error)
+    return c.json({ 
+      error: 'Failed to get subsidies',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Get single subsidy master data
+subsidiesRouter.get('/master/:id', async (c) => {
+  try {
+    const subsidyId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const subsidy = await c.env.DB.prepare(`
+      SELECT s.*,
+        COUNT(DISTINCT sa.id) as application_count,
+        COUNT(DISTINCT CASE WHEN sa.status IN ('approved', 'received') THEN sa.id END) as success_count,
+        AVG(CASE WHEN sa.amount_received > 0 THEN sa.amount_received END) as avg_received_amount
+      FROM subsidies s
+      LEFT JOIN subsidy_applications sa ON s.id = sa.subsidy_id
+      WHERE s.id = ?
+      GROUP BY s.id
+    `).bind(subsidyId).first()
+    
+    if (!subsidy) {
+      return c.json({ error: 'Subsidy not found' }, 404)
+    }
+    
+    // Get recent applications
+    const recentApplications = await c.env.DB.prepare(`
+      SELECT sa.*, c.name as client_name
+      FROM subsidy_applications sa
+      LEFT JOIN clients c ON sa.client_id = c.id
+      WHERE sa.subsidy_id = ?
+      ORDER BY sa.created_at DESC
+      LIMIT 10
+    `).bind(subsidyId).all()
+    
+    // Get templates
+    const templates = await c.env.DB.prepare(`
+      SELECT * FROM subsidy_templates
+      WHERE subsidy_id = ?
+      ORDER BY created_at DESC
+    `).bind(subsidyId).all()
+    
+    return c.json({
+      success: true,
+      subsidy: {
+        ...subsidy,
+        recent_applications: recentApplications.results || [],
+        templates: templates.results || []
+      }
+    })
+  } catch (error) {
+    console.error('Error getting subsidy detail:', error)
+    return c.json({ 
+      error: 'Failed to get subsidy',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Create new subsidy
+subsidiesRouter.post('/master', async (c) => {
+  try {
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const body = await c.req.json()
+    const {
+      name,
+      category,
+      managing_organization,
+      description,
+      max_amount,
+      subsidy_rate,
+      requirements,
+      required_documents,
+      application_period_type,
+      application_start_date,
+      application_end_date,
+      url
+    } = body
+    
+    if (!name || !category || !managing_organization) {
+      return c.json({ error: '助成金名、カテゴリ、管理団体は必須です' }, 400)
+    }
+    
+    const result = await c.env.DB.prepare(`
+      INSERT INTO subsidies (
+        name, category, managing_organization, description,
+        max_amount, subsidy_rate, requirements, required_documents,
+        application_period_type, application_start_date, application_end_date,
+        url, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).bind(
+      name, category, managing_organization, description,
+      max_amount || null, subsidy_rate || null,
+      typeof requirements === 'object' ? JSON.stringify(requirements) : requirements,
+      typeof required_documents === 'object' ? JSON.stringify(required_documents) : required_documents,
+      application_period_type || 'anytime',
+      application_start_date || null,
+      application_end_date || null,
+      url || null
+    ).run()
+    
+    return c.json({
+      success: true,
+      message: '助成金を登録しました',
+      subsidyId: result.meta.last_row_id
+    })
+  } catch (error) {
+    console.error('Error creating subsidy:', error)
+    return c.json({ 
+      error: 'Failed to create subsidy',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Update subsidy
+subsidiesRouter.put('/master/:id', async (c) => {
+  try {
+    const subsidyId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const body = await c.req.json()
+    const {
+      name,
+      category,
+      managing_organization,
+      description,
+      max_amount,
+      subsidy_rate,
+      requirements,
+      required_documents,
+      application_period_type,
+      application_start_date,
+      application_end_date,
+      url,
+      is_active
+    } = body
+    
+    await c.env.DB.prepare(`
+      UPDATE subsidies SET
+        name = ?, category = ?, managing_organization = ?, description = ?,
+        max_amount = ?, subsidy_rate = ?, requirements = ?, required_documents = ?,
+        application_period_type = ?, application_start_date = ?, application_end_date = ?,
+        url = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(
+      name, category, managing_organization, description,
+      max_amount || null, subsidy_rate || null,
+      typeof requirements === 'object' ? JSON.stringify(requirements) : requirements,
+      typeof required_documents === 'object' ? JSON.stringify(required_documents) : required_documents,
+      application_period_type || 'anytime',
+      application_start_date || null,
+      application_end_date || null,
+      url || null,
+      is_active !== undefined ? (is_active ? 1 : 0) : 1,
+      subsidyId
+    ).run()
+    
+    return c.json({
+      success: true,
+      message: '助成金を更新しました'
+    })
+  } catch (error) {
+    console.error('Error updating subsidy:', error)
+    return c.json({ 
+      error: 'Failed to update subsidy',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Delete subsidy
+subsidiesRouter.delete('/master/:id', async (c) => {
+  try {
+    const subsidyId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    // Check if there are any applications for this subsidy
+    const applicationCount = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM subsidy_applications WHERE subsidy_id = ?
+    `).bind(subsidyId).first()
+    
+    if (applicationCount && applicationCount.count > 0) {
+      return c.json({ 
+        error: 'この助成金に関連する申請があるため削除できません。無効化してください。' 
+      }, 400)
+    }
+    
+    await c.env.DB.prepare(`
+      DELETE FROM subsidies WHERE id = ?
+    `).bind(subsidyId).run()
+    
+    return c.json({
+      success: true,
+      message: '助成金を削除しました'
+    })
+  } catch (error) {
+    console.error('Error deleting subsidy:', error)
+    return c.json({ 
+      error: 'Failed to delete subsidy',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// ===== 助成金テンプレート管理エンドポイント =====
+
+// Get templates for a specific subsidy
+subsidiesRouter.get('/master/:id/templates', async (c) => {
+  try {
+    const subsidyId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const templates = await c.env.DB.prepare(`
+      SELECT st.*, u.name as created_by_name
+      FROM subsidy_templates st
+      LEFT JOIN users u ON st.created_by = u.id
+      WHERE st.subsidy_id = ?
+      ORDER BY st.created_at DESC
+    `).bind(subsidyId).all()
+    
+    return c.json({
+      success: true,
+      templates: templates.results || []
+    })
+  } catch (error) {
+    console.error('Error getting templates:', error)
+    return c.json({ 
+      error: 'Failed to get templates',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Create new template
+subsidiesRouter.post('/templates', async (c) => {
+  try {
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const body = await c.req.json()
+    const {
+      subsidy_id,
+      name,
+      checklist_items,
+      document_list,
+      timeline_template,
+      tips,
+      is_public
+    } = body
+    
+    if (!subsidy_id || !name) {
+      return c.json({ error: '助成金IDとテンプレート名は必須です' }, 400)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    const result = await c.env.DB.prepare(`
+      INSERT INTO subsidy_templates (
+        subsidy_id, name, checklist_items, document_list, 
+        timeline_template, tips, is_public, created_by,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      subsidy_id,
+      name,
+      typeof checklist_items === 'object' ? JSON.stringify(checklist_items) : checklist_items,
+      typeof document_list === 'object' ? JSON.stringify(document_list) : document_list,
+      typeof timeline_template === 'object' ? JSON.stringify(timeline_template) : timeline_template,
+      tips || null,
+      is_public ? 1 : 0,
+      userId
+    ).run()
+    
+    return c.json({
+      success: true,
+      message: 'テンプレートを作成しました',
+      templateId: result.meta.last_row_id
+    })
+  } catch (error) {
+    console.error('Error creating template:', error)
+    return c.json({ 
+      error: 'Failed to create template',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Update template
+subsidiesRouter.put('/templates/:id', async (c) => {
+  try {
+    const templateId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const body = await c.req.json()
+    const {
+      name,
+      checklist_items,
+      document_list,
+      timeline_template,
+      tips,
+      is_public
+    } = body
+    
+    await c.env.DB.prepare(`
+      UPDATE subsidy_templates SET
+        name = ?, checklist_items = ?, document_list = ?,
+        timeline_template = ?, tips = ?, is_public = ?
+      WHERE id = ?
+    `).bind(
+      name,
+      typeof checklist_items === 'object' ? JSON.stringify(checklist_items) : checklist_items,
+      typeof document_list === 'object' ? JSON.stringify(document_list) : document_list,
+      typeof timeline_template === 'object' ? JSON.stringify(timeline_template) : timeline_template,
+      tips || null,
+      is_public ? 1 : 0,
+      templateId
+    ).run()
+    
+    return c.json({
+      success: true,
+      message: 'テンプレートを更新しました'
+    })
+  } catch (error) {
+    console.error('Error updating template:', error)
+    return c.json({ 
+      error: 'Failed to update template',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Delete template
+subsidiesRouter.delete('/templates/:id', async (c) => {
+  try {
+    const templateId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    await c.env.DB.prepare(`
+      DELETE FROM subsidy_templates WHERE id = ?
+    `).bind(templateId).run()
+    
+    return c.json({
+      success: true,
+      message: 'テンプレートを削除しました'
+    })
+  } catch (error) {
+    console.error('Error deleting template:', error)
+    return c.json({ 
+      error: 'Failed to delete template',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// ===== チェックリスト管理エンドポイント =====
+
+// Get checklist items for an application
+subsidiesRouter.get('/applications/:id/checklist', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Verify user has access to this application
+    const application = await c.env.DB.prepare(`
+      SELECT id FROM subsidy_applications 
+      WHERE id = ? AND created_by = ?
+    `).bind(applicationId, userId).first()
+    
+    if (!application) {
+      return c.json({ error: 'Application not found' }, 404)
+    }
+    
+    const checklist = await c.env.DB.prepare(`
+      SELECT sc.*, u.name as completed_by_name
+      FROM subsidy_checklists sc
+      LEFT JOIN users u ON sc.completed_by = u.id
+      WHERE sc.application_id = ?
+      ORDER BY sc.display_order ASC, sc.created_at ASC
+    `).bind(applicationId).all()
+    
+    return c.json({
+      success: true,
+      checklist: checklist.results || []
+    })
+  } catch (error) {
+    console.error('Error getting checklist:', error)
+    return c.json({ 
+      error: 'Failed to get checklist',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Add checklist item
+subsidiesRouter.post('/applications/:id/checklist', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    const body = await c.req.json()
+    const { item_name, category, is_required, notes, display_order } = body
+    
+    if (!item_name) {
+      return c.json({ error: '項目名は必須です' }, 400)
+    }
+    
+    // Verify user has access to this application
+    const application = await c.env.DB.prepare(`
+      SELECT id FROM subsidy_applications 
+      WHERE id = ? AND created_by = ?
+    `).bind(applicationId, userId).first()
+    
+    if (!application) {
+      return c.json({ error: 'Application not found' }, 404)
+    }
+    
+    // Get next display order if not specified
+    let nextOrder = display_order
+    if (!nextOrder) {
+      const maxOrder = await c.env.DB.prepare(`
+        SELECT MAX(display_order) as max_order
+        FROM subsidy_checklists
+        WHERE application_id = ?
+      `).bind(applicationId).first()
+      
+      nextOrder = (maxOrder?.max_order || 0) + 1
+    }
+    
+    const result = await c.env.DB.prepare(`
+      INSERT INTO subsidy_checklists (
+        application_id, item_name, category, is_required,
+        is_completed, notes, display_order, created_at
+      ) VALUES (?, ?, ?, ?, 0, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      applicationId,
+      item_name,
+      category || null,
+      is_required ? 1 : 0,
+      notes || null,
+      nextOrder
+    ).run()
+    
+    return c.json({
+      success: true,
+      message: 'チェックリスト項目を追加しました',
+      itemId: result.meta.last_row_id
+    })
+  } catch (error) {
+    console.error('Error adding checklist item:', error)
+    return c.json({ 
+      error: 'Failed to add checklist item',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Update checklist item
+subsidiesRouter.put('/checklist/:itemId', async (c) => {
+  try {
+    const itemId = c.req.param('itemId')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    const body = await c.req.json()
+    const { item_name, category, is_required, is_completed, notes, display_order } = body
+    
+    // Verify user has access to this checklist item
+    const checklistItem = await c.env.DB.prepare(`
+      SELECT sc.*, sa.created_by
+      FROM subsidy_checklists sc
+      INNER JOIN subsidy_applications sa ON sc.application_id = sa.id
+      WHERE sc.id = ? AND sa.created_by = ?
+    `).bind(itemId, userId).first()
+    
+    if (!checklistItem) {
+      return c.json({ error: 'Checklist item not found' }, 404)
+    }
+    
+    // Update completion status and timestamp
+    const completedBy = is_completed ? userId : null
+    const completedAt = is_completed ? 'CURRENT_TIMESTAMP' : null
+    
+    await c.env.DB.prepare(`
+      UPDATE subsidy_checklists SET
+        item_name = ?, category = ?, is_required = ?,
+        is_completed = ?, completed_by = ?,
+        completed_at = ${completedAt ? 'CURRENT_TIMESTAMP' : 'NULL'},
+        notes = ?, display_order = ?
+      WHERE id = ?
+    `).bind(
+      item_name,
+      category || null,
+      is_required ? 1 : 0,
+      is_completed ? 1 : 0,
+      completedBy,
+      notes || null,
+      display_order || checklistItem.display_order,
+      itemId
+    ).run()
+    
+    return c.json({
+      success: true,
+      message: 'チェックリスト項目を更新しました'
+    })
+  } catch (error) {
+    console.error('Error updating checklist item:', error)
+    return c.json({ 
+      error: 'Failed to update checklist item',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Delete checklist item
+subsidiesRouter.delete('/checklist/:itemId', async (c) => {
+  try {
+    const itemId = c.req.param('itemId')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Verify user has access to this checklist item
+    const checklistItem = await c.env.DB.prepare(`
+      SELECT sc.*, sa.created_by
+      FROM subsidy_checklists sc
+      INNER JOIN subsidy_applications sa ON sc.application_id = sa.id
+      WHERE sc.id = ? AND sa.created_by = ?
+    `).bind(itemId, userId).first()
+    
+    if (!checklistItem) {
+      return c.json({ error: 'Checklist item not found' }, 404)
+    }
+    
+    await c.env.DB.prepare(`
+      DELETE FROM subsidy_checklists WHERE id = ?
+    `).bind(itemId).run()
+    
+    return c.json({
+      success: true,
+      message: 'チェックリスト項目を削除しました'
+    })
+  } catch (error) {
+    console.error('Error deleting checklist item:', error)
+    return c.json({ 
+      error: 'Failed to delete checklist item',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Reorder checklist items
+subsidiesRouter.put('/applications/:id/checklist/reorder', async (c) => {
+  try {
+    const applicationId = c.req.param('id')
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    const body = await c.req.json()
+    const { items } = body // Array of {id, display_order}
+    
+    if (!Array.isArray(items)) {
+      return c.json({ error: '項目リストが必要です' }, 400)
+    }
+    
+    // Verify user has access to this application
+    const application = await c.env.DB.prepare(`
+      SELECT id FROM subsidy_applications 
+      WHERE id = ? AND created_by = ?
+    `).bind(applicationId, userId).first()
+    
+    if (!application) {
+      return c.json({ error: 'Application not found' }, 404)
+    }
+    
+    // Update display orders
+    for (const item of items) {
+      await c.env.DB.prepare(`
+        UPDATE subsidy_checklists 
+        SET display_order = ? 
+        WHERE id = ? AND application_id = ?
+      `).bind(item.display_order, item.id, applicationId).run()
+    }
+    
+    return c.json({
+      success: true,
+      message: 'チェックリスト項目の順序を更新しました'
+    })
+  } catch (error) {
+    console.error('Error reordering checklist:', error)
+    return c.json({ 
+      error: 'Failed to reorder checklist',
+      debug: error.message 
+    }, 500)
+  }
+})
+
 // Search subsidies with filters
 subsidiesRouter.get('/search', async (c) => {
   try {

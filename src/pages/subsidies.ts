@@ -32,7 +32,10 @@ export function getSubsidiesPage(userName: string): string {
                                 <i class="fas fa-project-diagram mr-1"></i> プロジェクト
                             </a>
                             <a href="/subsidies" class="border-b-2 border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 text-sm font-medium">
-                                <i class="fas fa-coins mr-1"></i> 助成金
+                                <i class="fas fa-coins mr-1"></i> 助成金申請
+                            </a>
+                            <a href="/subsidy-master" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
+                                <i class="fas fa-database mr-1"></i> 助成金マスター
                             </a>
                             <a href="/clients" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
                                 <i class="fas fa-building mr-1"></i> 顧客管理
