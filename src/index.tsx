@@ -908,6 +908,8 @@ app.get('/login', (c) => {
 
 // Main dashboard page
 app.get('/', async (c) => {
+  console.log('Dashboard accessed - URL:', c.req.url)
+  
   // Check authentication
   const token = getCookie(c, 'auth-token')
   
@@ -927,6 +929,11 @@ app.get('/', async (c) => {
   }
   
   console.log('Dashboard: Authentication successful for user:', payload.email)
+  
+  // Set cache-busting headers to ensure fresh UI
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  c.header('Pragma', 'no-cache')
+  c.header('Expires', '0')
   
   return c.html(`
 <!DOCTYPE html>
@@ -983,7 +990,7 @@ app.get('/', async (c) => {
                 <div class="flex items-center">
                     <h1 class="text-2xl font-bold text-gray-900">
                         <i class="fas fa-briefcase mr-2 text-blue-600"></i>
-                        社労士事務所タスク管理
+                        社労士事務所タスク管理 <span class="text-xs text-gray-500">v2.0-unified</span>
                     </h1>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -1555,6 +1562,11 @@ app.get('/clients', async (c) => {
     return c.redirect('/login')
   }
   
+  // Set cache-busting headers
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  c.header('Pragma', 'no-cache')
+  c.header('Expires', '0')
+  
   return c.html(getSimplifiedClientsPage(payload.name))
 })
 
@@ -1619,6 +1631,8 @@ app.get('/calendar', async (c) => {
 
 // Unified Business Management page (core feature consolidation)
 app.get('/business', async (c) => {
+  console.log('Business Management page accessed - URL:', c.req.url)
+  
   const token = getCookie(c, 'auth-token')
   
   if (!token) {
@@ -1631,6 +1645,11 @@ app.get('/business', async (c) => {
   if (!payload) {
     return c.redirect('/login')
   }
+  
+  // Set cache-busting headers
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  c.header('Pragma', 'no-cache')
+  c.header('Expires', '0')
   
   return c.html(getBusinessManagementPage(payload))
 })
@@ -1656,6 +1675,11 @@ app.get('/subsidies', async (c) => {
   if (!payload) {
     return c.redirect('/login')
   }
+  
+  // Set cache-busting headers
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  c.header('Pragma', 'no-cache')
+  c.header('Expires', '0')
   
   return c.html(getUnifiedSubsidiesPage(payload.name))
 })
