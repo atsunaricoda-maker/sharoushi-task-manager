@@ -291,43 +291,63 @@ export const subsidyMasterPage = html`
     let currentPage = 1;
     let currentFilters = {};
 
+    // Utility functions
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML.replace(/'/g, '&#39;');
+    }
+
     // Global functions (must be outside DOMContentLoaded for onclick to work)
     function showAddSubsidyModal() {
       try {
         console.log('showAddSubsidyModal called');
         
-        const modalTitle = document.getElementById('subsidyModalTitle');
-        const subsidyForm = document.getElementById('subsidyForm');
-        const subsidyId = document.getElementById('subsidyId');
-        const isActive = document.getElementById('is_active');
-        const periodDates = document.getElementById('applicationPeriodDates');
-        const modalElement = document.getElementById('subsidyModal');
+        // DOM要素の存在確認を行い、なければ少し待って再試行
+        const checkAndShow = () => {
+          const modalTitle = document.getElementById('subsidyModalTitle');
+          const subsidyForm = document.getElementById('subsidyForm');
+          const subsidyId = document.getElementById('subsidyId');
+          const isActive = document.getElementById('is_active');
+          const periodDates = document.getElementById('applicationPeriodDates');
+          const modalElement = document.getElementById('subsidyModal');
+          
+          if (!modalTitle || !subsidyForm || !subsidyId || !isActive || !periodDates || !modalElement) {
+            console.error('Required modal elements not found');
+            alert('モーダル要素が見つかりません。ページを再読み込みしてください。');
+            return false;
+          }
+          
+          modalTitle.textContent = '新規助成金登録';
+          subsidyForm.reset();
+          subsidyId.value = '';
+          isActive.checked = true;
+          periodDates.style.display = 'none';
+          
+          // Bootstrap 5の場合
+          if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+          } else {
+            console.error('Bootstrap Modal not available');
+            alert('Bootstrap Modal が利用できません。ページを再読み込みしてください。');
+          }
+          return true;
+        };
         
-        if (!modalTitle || !subsidyForm || !subsidyId || !isActive || !periodDates || !modalElement) {
-          console.error('Required modal elements not found');
-          alert('モーダル要素が見つかりません。ページを再読み込みしてください。');
-          return;
-        }
-        
-        modalTitle.textContent = '新規助成金登録';
-        subsidyForm.reset();
-        subsidyId.value = '';
-        isActive.checked = true;
-        periodDates.style.display = 'none';
-        
-        // Bootstrap 5の場合
-        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-          const modal = new bootstrap.Modal(modalElement);
-          modal.show();
-        } else {
-          console.error('Bootstrap Modal not available');
-          alert('Bootstrap Modal が利用できません。ページを再読み込みしてください。');
+        // 即座に試行し、失敗したら100ms後に再試行
+        if (!checkAndShow()) {
+          setTimeout(checkAndShow, 100);
         }
       } catch (error) {
         console.error('Error in showAddSubsidyModal:', error);
         alert('モーダル表示でエラーが発生しました: ' + error.message);
       }
     }
+
+    // Make functions globally accessible immediately (before DOM is loaded)
+    window.showAddSubsidyModal = showAddSubsidyModal;
 
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
@@ -351,8 +371,7 @@ export const subsidyMasterPage = html`
         }
       });
       
-      // Make functions globally accessible for onclick handlers
-      window.showAddSubsidyModal = showAddSubsidyModal;
+      // Make additional functions globally accessible after DOM is loaded
       window.searchSubsidies = searchSubsidies;
       window.saveSubsidy = saveSubsidy;
       window.editSubsidy = editSubsidy;
@@ -459,7 +478,7 @@ export const subsidyMasterPage = html`
                 '<button class="btn btn-outline-secondary btn-sm" onclick="editSubsidy(' + subsidy.id + ')">' +
                   '<i class="bi bi-pencil me-1"></i>編集' +
                 '</button>' +
-                '<button class="btn btn-outline-danger btn-sm" onclick="deleteSubsidy(' + subsidy.id + ', \'' + subsidy.name.replace(/'/g, "\\'") + '\', ' + subsidy.application_count + ')">' +
+                '<button class="btn btn-outline-danger btn-sm" onclick="deleteSubsidy(' + subsidy.id + ', ' + JSON.stringify(subsidy.name) + ', ' + subsidy.application_count + ')">' +
                   '<i class="bi bi-trash me-1"></i>削除' +
                 '</button>' +
               '</div>' +
