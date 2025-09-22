@@ -1018,50 +1018,54 @@ app.get('/', async (c) => {
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white rounded-lg shadow p-6 animate-slide-in">
+            <div class="bg-white rounded-lg shadow-lg p-6 animate-slide-in border-l-4 border-blue-500">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm font-medium">今日のタスク</p>
+                        <p class="text-blue-600 text-sm font-medium mb-1">📋 今日やること</p>
                         <p class="text-3xl font-bold text-gray-900" id="todayCount">-</p>
+                        <p class="text-xs text-gray-500 mt-1">件の作業があります</p>
                     </div>
-                    <div class="bg-blue-100 p-3 rounded-full">
-                        <i class="fas fa-calendar-day text-blue-600 text-xl"></i>
+                    <div class="bg-blue-100 p-4 rounded-full">
+                        <i class="fas fa-calendar-day text-blue-600 text-2xl"></i>
                     </div>
                 </div>
             </div>
             
-            <div class="bg-white rounded-lg shadow p-6 animate-slide-in" style="animation-delay: 0.1s">
+            <div class="bg-white rounded-lg shadow-lg p-6 animate-slide-in border-l-4 border-red-500" style="animation-delay: 0.1s">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm font-medium">遅延タスク</p>
+                        <p class="text-red-600 text-sm font-medium mb-1">⚠️ 急いで！</p>
                         <p class="text-3xl font-bold text-red-600" id="overdueCount">-</p>
+                        <p class="text-xs text-gray-500 mt-1">件の遅れている作業</p>
                     </div>
-                    <div class="bg-red-100 p-3 rounded-full">
-                        <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                    <div class="bg-red-100 p-4 rounded-full">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
                     </div>
                 </div>
             </div>
             
-            <div class="bg-white rounded-lg shadow p-6 animate-slide-in" style="animation-delay: 0.2s">
+            <div class="bg-white rounded-lg shadow-lg p-6 animate-slide-in border-l-4 border-green-500" style="animation-delay: 0.2s">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm font-medium">今週のタスク</p>
+                        <p class="text-green-600 text-sm font-medium mb-1">📅 今週の予定</p>
                         <p class="text-3xl font-bold text-gray-900" id="weekCount">-</p>
+                        <p class="text-xs text-gray-500 mt-1">件の作業予定</p>
                     </div>
-                    <div class="bg-green-100 p-3 rounded-full">
-                        <i class="fas fa-calendar-week text-green-600 text-xl"></i>
+                    <div class="bg-green-100 p-4 rounded-full">
+                        <i class="fas fa-calendar-week text-green-600 text-2xl"></i>
                     </div>
                 </div>
             </div>
             
-            <div class="bg-white rounded-lg shadow p-6 animate-slide-in" style="animation-delay: 0.3s">
+            <div class="bg-white rounded-lg shadow-lg p-6 animate-slide-in border-l-4 border-orange-500" style="animation-delay: 0.3s">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm font-medium">進行中</p>
-                        <p class="text-3xl font-bold text-blue-600" id="inProgressCount">-</p>
+                        <p class="text-orange-600 text-sm font-medium mb-1">🚀 作業中</p>
+                        <p class="text-3xl font-bold text-orange-600" id="inProgressCount">-</p>
+                        <p class="text-xs text-gray-500 mt-1">件を進めています</p>
                     </div>
-                    <div class="bg-blue-100 p-3 rounded-full">
-                        <i class="fas fa-spinner text-blue-600 text-xl"></i>
+                    <div class="bg-orange-100 p-4 rounded-full">
+                        <i class="fas fa-play text-orange-600 text-2xl"></i>
                     </div>
                 </div>
             </div>
@@ -1073,11 +1077,11 @@ app.get('/', async (c) => {
             <div class="bg-white rounded-lg shadow">
                 <div class="px-6 py-4 border-b flex justify-between items-center">
                     <h2 class="text-lg font-semibold text-gray-900">
-                        <i class="fas fa-clock mr-2 text-gray-600"></i>
-                        直近のタスク
+                        <i class="fas fa-list-check mr-2 text-blue-600"></i>
+                        今日やることリスト
                     </h2>
-                    <button onclick="openTaskModal()" class="text-blue-600 hover:text-blue-700">
-                        <i class="fas fa-plus-circle"></i> 新規作成
+                    <button onclick="openTaskModal()" class="text-blue-600 hover:text-blue-700 text-sm">
+                        <i class="fas fa-plus-circle mr-1"></i> やることを追加
                     </button>
                 </div>
                 <div class="p-6">
@@ -1094,8 +1098,8 @@ app.get('/', async (c) => {
             <div class="bg-white rounded-lg shadow">
                 <div class="px-6 py-4 border-b">
                     <h2 class="text-lg font-semibold text-gray-900">
-                        <i class="fas fa-chart-bar mr-2 text-gray-600"></i>
-                        スタッフ別業務量
+                        <i class="fas fa-users mr-2 text-green-600"></i>
+                        みんなの作業状況
                     </h2>
                 </div>
                 <div class="p-6">
@@ -1104,85 +1108,114 @@ app.get('/', async (c) => {
             </div>
         </div>
 
-        <!-- AI Task Generation Section -->
-        <div class="mt-8 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg shadow p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">
-                    <i class="fas fa-robot mr-2 text-purple-600"></i>
-                    AI自動タスク生成
-                </h3>
-                <span class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Gemini AI</span>
+        <!-- 簡単操作ガイド -->
+        <div class="mt-8 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg shadow-lg p-6 border-l-4 border-orange-400">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-lightbulb text-orange-600 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-bold text-gray-900 mb-2">
+                        💡 使い方のコツ
+                    </h3>
+                    <div class="space-y-2 text-gray-700">
+                        <div class="flex items-center">
+                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-medium mr-3">1</span>
+                            <span>朝一番に「今日のやること」で今日の予定を確認</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm font-medium mr-3">2</span>
+                            <span>「お客様管理」で連絡先や契約内容をチェック</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm font-medium mr-3">3</span>
+                            <span>「予定表」で面談や締切日を確認・追加</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <select id="aiClientSelect" class="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500">
-                    <option value="">顧問先を選択...</option>
-                </select>
-                <input type="month" id="aiMonthSelect" class="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500">
-                <button onclick="generateTasksWithAI()" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-                    <i class="fas fa-magic mr-2"></i>タスクを自動生成
+        </div>
+
+        <!-- シンプル機能選択 -->
+        <div class="mt-8 bg-white rounded-lg shadow-lg p-8">
+            <h3 class="text-2xl font-bold text-gray-900 mb-2 text-center">
+                <i class="fas fa-mouse-pointer mr-3 text-blue-600"></i>
+                何をしますか？
+            </h3>
+            <p class="text-gray-600 text-center mb-8">やりたいことをクリックしてください</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- 今日のやること -->
+                <a href="/tasks" class="group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 border-2 border-transparent hover:border-blue-300 shadow-md hover:shadow-lg">
+                    <div class="text-center">
+                        <div class="bg-blue-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-list-check text-white text-2xl"></i>
+                        </div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">今日のやること</h4>
+                        <p class="text-gray-600 text-sm">今日やる仕事の確認・完了チェック</p>
+                    </div>
+                </a>
+                
+                <!-- 顧問先 -->
+                <a href="/clients" class="group bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 hover:from-green-100 hover:to-green-200 transition-all duration-200 border-2 border-transparent hover:border-green-300 shadow-md hover:shadow-lg">
+                    <div class="text-center">
+                        <div class="bg-green-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-users text-white text-2xl"></i>
+                        </div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">お客様管理</h4>
+                        <p class="text-gray-600 text-sm">顧問先の情報確認・連絡先管理</p>
+                    </div>
+                </a>
+                
+                <!-- 予定表 -->
+                <a href="/calendar" class="group bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 hover:from-purple-100 hover:to-purple-200 transition-all duration-200 border-2 border-transparent hover:border-purple-300 shadow-md hover:shadow-lg">
+                    <div class="text-center">
+                        <div class="bg-purple-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-calendar-days text-white text-2xl"></i>
+                        </div>
+                        <h4 class="text-xl font-bold text-gray-900 mb-2">予定表</h4>
+                        <p class="text-gray-600 text-sm">面談・締切日の確認・予定追加</p>
+                    </div>
+                </a>
+            </div>
+            
+            <!-- その他の機能 -->
+            <details class="mt-8">
+                <summary class="cursor-pointer text-gray-600 hover:text-gray-800 text-center py-2 border-t border-gray-200 pt-4">
+                    <i class="fas fa-chevron-down mr-2"></i>その他の便利機能
+                </summary>
+                <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <a href="/reports" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <i class="fas fa-chart-simple text-orange-600 text-lg mb-2 block"></i>
+                        <span class="text-sm text-gray-700">月次まとめ</span>
+                    </a>
+                    <a href="/subsidies" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <i class="fas fa-money-bill text-yellow-600 text-lg mb-2 block"></i>
+                        <span class="text-sm text-gray-700">助成金手続き</span>
+                    </a>
+                    <a href="/projects" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <i class="fas fa-folder text-indigo-600 text-lg mb-2 block"></i>
+                        <span class="text-sm text-gray-700">仕事の進捗</span>
+                    </a>
+                    <a href="/settings" class="text-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <i class="fas fa-gear text-gray-600 text-lg mb-2 block"></i>
+                        <span class="text-sm text-gray-700">設定</span>
+                    </a>
+                </div>
+            </details>
+        </div>
+
+        <!-- 簡単アクション -->
+        <div class="mt-8 bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 text-center">
+                <i class="fas fa-plus-circle mr-2 text-green-600"></i>
+                新しく追加する
+            </h3>
+            <div class="flex justify-center space-x-4">
+                <button onclick="openTaskModal()" class="bg-blue-600 text-white px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors shadow-lg text-lg">
+                    <i class="fas fa-plus mr-2"></i>今日やることを追加
                 </button>
             </div>
-            <div id="aiGenerationResult" class="mt-4"></div>
-        </div>
-
-        <!-- Quick Links Navigation -->
-        <div class="mt-8 bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                <i class="fas fa-th mr-2 text-gray-600"></i>
-                機能一覧
-            </h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <a href="/tasks" class="flex items-center p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors">
-                    <i class="fas fa-tasks text-teal-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">タスク管理</span>
-                </a>
-                <a href="/clients" class="flex items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                    <i class="fas fa-building text-blue-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">顧問先管理</span>
-                </a>
-                <a href="/reports" class="flex items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
-                    <i class="fas fa-chart-line text-green-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">レポート</span>
-                </a>
-                <a href="/calendar" class="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                    <i class="fas fa-calendar text-purple-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">カレンダー</span>
-                </a>
-                <a href="/gmail" class="flex items-center p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
-                    <i class="fas fa-envelope text-red-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">Gmail連携</span>
-                </a>
-                <a href="/projects" class="flex items-center p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-                    <i class="fas fa-project-diagram text-indigo-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">プロジェクト</span>
-                </a>
-                <a href="/subsidies" class="flex items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
-                    <i class="fas fa-hand-holding-usd text-yellow-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">助成金申請管理</span>
-                </a>
-                <a href="/subsidy-master" class="flex items-center p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
-                    <i class="fas fa-database text-orange-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">助成金マスター管理</span>
-                </a>
-                <a href="/settings" class="flex items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                    <i class="fas fa-cog text-gray-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">設定</span>
-                </a>
-                <a href="/admin" class="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                    <i class="fas fa-chart-line text-purple-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">管理者ダッシュボード</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="mt-8 flex justify-center space-x-4">
-            <button onclick="openTaskModal()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg">
-                <i class="fas fa-plus mr-2"></i>新規タスク作成
-            </button>
-            <button class="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors shadow-lg">
-                <i class="fas fa-file-export mr-2"></i>レポート出力
-            </button>
         </div>
     </main>
 
