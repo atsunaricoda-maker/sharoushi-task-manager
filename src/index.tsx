@@ -246,6 +246,30 @@ app.route('/api/projects', projectsRouter)
 app.route('/api/subsidies', subsidiesRouter)
 app.route('/api/admin', adminRouter)
 
+// Debug endpoint to check database tables (public)
+app.get('/api/debug/tables', async (c) => {
+  try {
+    const tables = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' 
+      ORDER BY name
+    `).all()
+    
+    return c.json({
+      success: true,
+      tables: tables.results || [],
+      message: 'Database tables retrieved successfully'
+    })
+  } catch (error) {
+    console.error('Error checking database tables:', error)
+    return c.json({ 
+      success: false,
+      error: 'Failed to check database tables',
+      debug: error.message 
+    }, 500)
+  }
+})
+
 // Health check endpoint (public)
 app.get('/api/health', async (c) => {
   try {
