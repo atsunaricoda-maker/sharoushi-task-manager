@@ -1102,9 +1102,13 @@ export function getSubsidiesPage(userName: string): string {
             // ステータス更新
             async function updateApplicationStatus(applicationId, newStatus) {
                 try {
+                    console.log('Updating status for application:', applicationId, 'to:', newStatus);
+                    
                     const response = await axios.put(\`/api/subsidies/applications/\${applicationId}\`, {
                         status: newStatus
                     });
+                    
+                    console.log('Status update response:', response.data);
                     
                     if (response.data.success) {
                         // ステータス変更成功のメッセージ
@@ -1135,9 +1139,14 @@ export function getSubsidiesPage(userName: string): string {
                     }
                 } catch (error) {
                     console.error('Status update error:', error);
-                    alert('ステータスの更新に失敗しました');
+                    console.error('Error response:', error.response?.data);
+                    console.error('Error status:', error.response?.status);
+                    
+                    const errorMsg = error.response?.data?.debug || error.response?.data?.error || error.message;
+                    alert(\`ステータスの更新に失敗しました: \${errorMsg}\`);
+                    
                     // セレクトボックスを元に戻す
-                    location.reload();
+                    showApplicationDetail(applicationId);
                 }
             }
             

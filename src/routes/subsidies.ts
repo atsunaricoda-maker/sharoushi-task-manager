@@ -319,26 +319,36 @@ subsidiesRouter.get('/applications/:id', async (c) => {
 // Update subsidy application
 subsidiesRouter.put('/applications/:id', async (c) => {
   try {
+    console.log('PUT /applications/:id called')
     const applicationId = c.req.param('id')
     const user = c.get('user')
-    const body = await c.req.json()
+    
+    console.log('Application ID:', applicationId)
+    console.log('User:', user)
     
     if (!user) {
+      console.log('No user authenticated')
       return c.json({ error: 'User not authenticated' }, 401)
     }
+    
+    const body = await c.req.json()
+    console.log('Request body:', body)
     
     const userId = parseInt(user.sub)
     const { status, notes, checklist } = body
     
     // Update main application
     if (status || notes !== undefined) {
-      await c.env.DB.prepare(`
+      console.log('Updating application with status:', status, 'notes:', notes)
+      const result = await c.env.DB.prepare(`
         UPDATE subsidy_applications 
         SET status = COALESCE(?, status), 
             notes = COALESCE(?, notes),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND created_by = ?
       `).bind(status, notes, applicationId, userId).run()
+      
+      console.log('Update result:', result)
     }
     
     // Update checklist items
