@@ -95,8 +95,14 @@ scheduleRouter.get('/', async (c) => {
 
 // Get single schedule entry
 scheduleRouter.get('/:id', async (c) => {
+  // Check authentication
+  const authError = await checkScheduleAuth(c)
+  if (authError) return authError
+  
   try {
     const id = c.req.param('id')
+    
+    console.log('Fetching schedule entry:', id)
     
     let entry
     try {
@@ -115,6 +121,7 @@ scheduleRouter.get('/:id', async (c) => {
       return c.json({ error: 'Schedule entry not found' }, 404)
     }
     
+    console.log('Successfully fetched schedule entry:', entry)
     return c.json(entry)
   } catch (error) {
     console.error('Error fetching schedule entry:', error)
@@ -250,52 +257,118 @@ scheduleRouter.post('/', async (c) => {
 
 // Update schedule entry
 scheduleRouter.put('/:id', async (c) => {
+  // Check authentication
+  const authError = await checkScheduleAuth(c)
+  if (authError) return authError
+  
   try {
     const id = c.req.param('id')
     const body = await c.req.json()
     const { 
-      user_id, client_id, title, description, entry_type,
+      client_id, title, description, entry_type,
       start_time, end_time, location, is_recurring, recurrence_pattern
     } = body
     
-    await c.env.DB.prepare(`
-      UPDATE schedule_entries SET
-        user_id = ?, client_id = ?, title = ?, description = ?,
-        entry_type = ?, start_time = ?, end_time = ?, location = ?,
-        is_recurring = ?, recurrence_pattern = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).bind(
-      user_id, client_id, title, description, entry_type,
-      start_time, end_time, location, is_recurring ? 1 : 0,
-      recurrence_pattern ? JSON.stringify(recurrence_pattern) : null, id
-    ).run()
+    // Get user_id from auth context
+    const userId = c.get('userId')
+    const user = c.get('user')
     
-    return c.json({ 
-      success: true,
-      message: 'スケジュールを更新しました'
-    })
+    console.log('Updating schedule entry:', { id, title, entry_type, start_time, userId })
+    
+    // Validate required fields
+    if (!title || !start_time) {
+      return c.json({ error: 'タイトルと開始時刻は必須です' }, 400)
+    }
+    
+    // Validate userId is available
+    if (!userId) {
+      console.error('No userId found in auth context for update:', { user })
+      return c.json({ 
+        error: 'ユーザー情報が見つかりません', 
+        debug: 'No userId in auth context'
+      }, 400)
+    }
+    
+    try {
+      const result = await c.env.DB.prepare(`
+        UPDATE schedule_entries SET
+          user_id = ?, client_id = ?, title = ?, description = ?,
+          entry_type = ?, start_time = ?, end_time = ?, location = ?,
+          is_recurring = ?, recurrence_pattern = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).bind(
+        userId, 
+        client_id || null, 
+        title, 
+        description || null, 
+        entry_type || 'other',
+        start_time, 
+        end_time || null, 
+        location || null, 
+        is_recurring ? 1 : 0,
+        recurrence_pattern ? JSON.stringify(recurrence_pattern) : null, 
+        id
+      ).run()
+      
+      console.log('Successfully updated schedule entry:', id, result.meta)
+      
+      return c.json({ 
+        success: true,
+        message: 'スケジュールを更新しました'
+      })
+    } catch (dbError) {
+      console.error('Database error updating schedule entry:', dbError)
+      return c.json({ 
+        error: 'データベースエラーが発生しました',
+        debug: dbError.message 
+      }, 500)
+    }
+    
   } catch (error) {
-    console.error('Error updating schedule entry:', error)
-    return c.json({ error: 'Failed to update schedule entry' }, 500)
+    console.error('Unexpected error updating schedule entry:', error)
+    return c.json({ 
+      error: 'スケジュール更新中に予期しないエラーが発生しました', 
+      debug: error.message 
+    }, 500)
   }
 })
 
 // Delete schedule entry
 scheduleRouter.delete('/:id', async (c) => {
+  // Check authentication
+  const authError = await checkScheduleAuth(c)
+  if (authError) return authError
+  
   try {
     const id = c.req.param('id')
     
-    await c.env.DB.prepare(`
-      DELETE FROM schedule_entries WHERE id = ?
-    `).bind(id).run()
+    console.log('Deleting schedule entry:', id)
     
-    return c.json({ 
-      success: true,
-      message: 'スケジュールを削除しました'
-    })
+    try {
+      const result = await c.env.DB.prepare(`
+        DELETE FROM schedule_entries WHERE id = ?
+      `).bind(id).run()
+      
+      console.log('Successfully deleted schedule entry:', id, result.meta)
+      
+      return c.json({ 
+        success: true,
+        message: 'スケジュールを削除しました'
+      })
+    } catch (dbError) {
+      console.error('Database error deleting schedule entry:', dbError)
+      return c.json({ 
+        error: 'データベースエラーが発生しました',
+        debug: dbError.message 
+      }, 500)
+    }
+    
   } catch (error) {
-    console.error('Error deleting schedule entry:', error)
-    return c.json({ error: 'Failed to delete schedule entry' }, 500)
+    console.error('Unexpected error deleting schedule entry:', error)
+    return c.json({ 
+      error: 'スケジュール削除中に予期しないエラーが発生しました', 
+      debug: error.message 
+    }, 500)
   }
 })
 

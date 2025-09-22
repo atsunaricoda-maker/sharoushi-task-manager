@@ -235,8 +235,8 @@ export function getSchedulePage(userName: string, userRole: string): string {
     <div id="newEventModal" class="modal">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
             <div class="px-6 py-4 border-b flex justify-between items-center">
-                <h3 class="text-lg font-semibold">新規予定登録</h3>
-                <button onclick="closeNewEventModal()" class="text-gray-500 hover:text-gray-700">
+                <h3 id="eventModalTitle" class="text-lg font-semibold">新規予定登録</h3>
+                <button onclick="closeEventModal()" class="text-gray-500 hover:text-gray-700">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -287,13 +287,20 @@ export function getSchedulePage(userName: string, userRole: string): string {
                         <textarea name="description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
                     </div>
                     
-                    <div class="flex justify-end space-x-3 pt-4">
-                        <button type="button" onclick="closeNewEventModal()" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-                            キャンセル
-                        </button>
-                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                            登録
-                        </button>
+                    <div class="flex justify-between pt-4">
+                        <div>
+                            <button type="button" id="deleteEventBtn" onclick="deleteCurrentEvent()" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700" style="display: none;">
+                                <i class="fas fa-trash mr-2"></i>削除
+                            </button>
+                        </div>
+                        <div class="flex space-x-3">
+                            <button type="button" onclick="closeEventModal()" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                                キャンセル
+                            </button>
+                            <button type="submit" id="submitEventBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                登録
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -308,6 +315,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
         let currentDate = dayjs();
         let scheduleEvents = [];
         let clients = [];
+        let currentEditingEventId = null;
 
         // Toast notification system
         function showToast(message, type = 'info', duration = 3000) {
@@ -427,7 +435,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
                     <div class="\${dayClass}" onclick="selectDate('\${date.format('YYYY-MM-DD')}')" data-date="\${date.format('YYYY-MM-DD')}">
                         <div class="day-number">\${date.format('D')}</div>
                         \${dayEvents.map(event => \`
-                            <div class="calendar-event \${event.entry_type || 'other'}" onclick="event.stopPropagation(); editEvent(\${event.id})" title="\${event.title}">
+                            <div class="calendar-event \${event.entry_type || 'other'}" onclick="event.stopPropagation(); editEvent(\${event.id})" title="\${event.title}\n\${event.client_name ? '顧問先: ' + event.client_name : ''}\n\${dayjs(event.start_time).format('HH:mm')}\${event.end_time ? ' - ' + dayjs(event.end_time).format('HH:mm') : ''}">
                                 \${event.title.length > 12 ? event.title.substring(0, 12) + '...' : event.title}
                             </div>
                         \`).join('')}
@@ -508,12 +516,17 @@ export function getSchedulePage(userName: string, userRole: string): string {
 
         // Modal functions
         function openNewEventModal() {
+            currentEditingEventId = null;
+            document.getElementById('eventModalTitle').textContent = '新規予定登録';
+            document.getElementById('submitEventBtn').textContent = '登録';
+            document.getElementById('deleteEventBtn').style.display = 'none';
             document.getElementById('newEventModal').classList.add('active');
         }
 
-        function closeNewEventModal() {
+        function closeEventModal() {
             document.getElementById('newEventModal').classList.remove('active');
             document.getElementById('newEventForm').reset();
+            currentEditingEventId = null;
         }
 
         // Event form submission
@@ -521,25 +534,35 @@ export function getSchedulePage(userName: string, userRole: string): string {
             e.preventDefault();
             const submitButton = e.target.querySelector('button[type="submit"]');
             const originalText = submitButton.textContent;
+            const isEditing = currentEditingEventId !== null;
             
             submitButton.disabled = true;
-            submitButton.innerHTML = '<span class="loading-spinner"></span> 登録中...';
+            submitButton.innerHTML = \`<span class="loading-spinner"></span> \${isEditing ? '更新中...' : '登録中...'}\`;
             
             const formData = new FormData(e.target);
             const eventData = Object.fromEntries(formData);
             
             // user_id will be automatically set by the server from auth context
-            console.log('Submitting event data:', eventData);
+            console.log('Submitting event data:', eventData, 'isEditing:', isEditing);
             
             try {
-                const response = await axios.post('/api/schedule', eventData);
-                console.log('Schedule creation response:', response.data);
-                closeNewEventModal();
+                let response;
+                if (isEditing) {
+                    // Update existing event
+                    response = await axios.put(\`/api/schedule/\${currentEditingEventId}\`, eventData);
+                    console.log('Schedule update response:', response.data);
+                } else {
+                    // Create new event
+                    response = await axios.post('/api/schedule', eventData);
+                    console.log('Schedule creation response:', response.data);
+                }
+                
+                closeEventModal();
                 await loadScheduleEvents();
-                showToast(response.data.message || '予定を登録しました', 'success');
+                showToast(response.data.message || (isEditing ? '予定を更新しました' : '予定を登録しました'), 'success');
             } catch (error) {
-                console.error('Error creating event:', error);
-                const errorMsg = error.response?.data?.error || '予定の登録に失敗しました';
+                console.error('Error saving event:', error);
+                const errorMsg = error.response?.data?.error || (isEditing ? '予定の更新に失敗しました' : '予定の登録に失敗しました');
                 const debugInfo = error.response?.data?.debug ? \` (詳細: \${error.response.data.debug})\` : '';
                 showToast(errorMsg + debugInfo, 'error', 5000);
             } finally {
@@ -549,9 +572,56 @@ export function getSchedulePage(userName: string, userRole: string): string {
         });
 
         // Edit existing event
-        function editEvent(eventId) {
-            // TODO: Implement edit functionality
-            console.log('Edit event:', eventId);
+        async function editEvent(eventId) {
+            try {
+                console.log('Loading event for edit:', eventId);
+                const response = await axios.get(`/api/schedule/${eventId}`);
+                const event = response.data;
+                
+                // Set modal to edit mode
+                currentEditingEventId = eventId;
+                document.getElementById('eventModalTitle').textContent = '予定編集';
+                document.getElementById('submitEventBtn').textContent = '更新';
+                document.getElementById('deleteEventBtn').style.display = 'block';
+                
+                // Populate form with existing data
+                const form = document.getElementById('newEventForm');
+                form.querySelector('input[name="title"]').value = event.title || '';
+                form.querySelector('select[name="entry_type"]').value = event.entry_type || 'other';
+                form.querySelector('select[name="client_id"]').value = event.client_id || '';
+                form.querySelector('input[name="start_time"]').value = event.start_time ? dayjs(event.start_time).format('YYYY-MM-DDTHH:mm') : '';
+                form.querySelector('input[name="end_time"]').value = event.end_time ? dayjs(event.end_time).format('YYYY-MM-DDTHH:mm') : '';
+                form.querySelector('input[name="location"]').value = event.location || '';
+                form.querySelector('textarea[name="description"]').value = event.description || '';
+                
+                // Open modal
+                document.getElementById('newEventModal').classList.add('active');
+                
+            } catch (error) {
+                console.error('Failed to load event for editing:', error);
+                showToast('予定の読み込みに失敗しました', 'error');
+            }
+        }
+
+        // Delete current event
+        async function deleteCurrentEvent() {
+            if (!currentEditingEventId) return;
+            
+            const confirmed = confirm('この予定を削除してもよろしいですか？');
+            if (!confirmed) return;
+            
+            try {
+                const response = await axios.delete(`/api/schedule/${currentEditingEventId}`);
+                console.log('Event deleted:', response.data);
+                
+                closeEventModal();
+                await loadScheduleEvents();
+                showToast(response.data.message || '予定を削除しました', 'success');
+            } catch (error) {
+                console.error('Failed to delete event:', error);
+                const errorMsg = error.response?.data?.error || '予定の削除に失敗しました';
+                showToast(errorMsg, 'error');
+            }
         }
 
         // Add loading spinner CSS
