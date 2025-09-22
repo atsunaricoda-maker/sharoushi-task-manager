@@ -320,15 +320,15 @@ export function getSchedulePage(userName: string, userRole: string): string {
         // Toast notification system
         function showToast(message, type = 'info', duration = 3000) {
             const toast = document.createElement('div');
-            toast.className = \`toast \${type}\`;
-            toast.innerHTML = \`
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
                 <div class="flex items-center justify-between">
-                    <span>\${message}</span>
+                    <span>${message}</span>
                     <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-            \`;
+            `;
             
             document.body.appendChild(toast);
             setTimeout(() => toast.classList.add('show'), 100);
@@ -389,8 +389,8 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 const startOfMonth = currentDate.startOf('month').format('YYYY-MM-DD');
                 const endOfMonth = currentDate.endOf('month').format('YYYY-MM-DD');
                 
-                console.log(\`Loading schedule events: \${startOfMonth} to \${endOfMonth}\`);
-                const response = await axios.get(\`/api/schedule?start_date=\${startOfMonth}&end_date=\${endOfMonth}\`);
+                console.log(`Loading schedule events: ${startOfMonth} to ${endOfMonth}`);
+                const response = await axios.get(`/api/schedule?start_date=${startOfMonth}&end_date=${endOfMonth}`);
                 console.log('Schedule response:', response.data);
                 scheduleEvents = response.data || [];
                 
@@ -401,7 +401,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 console.error('Error details:', error.response?.data);
                 scheduleEvents = [];
                 renderCalendar();
-                showToast(\`スケジュール読み込みエラー: \${error.response?.data?.error || error.message}\`, 'error', 5000);
+                showToast(`スケジュール読み込みエラー: ${error.response?.data?.error || error.message}`, 'error', 5000);
             }
         }
 
@@ -431,16 +431,16 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 if (!isCurrentMonth) dayClass += ' other-month';
                 if (isToday) dayClass += ' today';
                 
-                calendarHtml += \`
-                    <div class="\${dayClass}" onclick="selectDate('\${date.format('YYYY-MM-DD')}')" data-date="\${date.format('YYYY-MM-DD')}">
-                        <div class="day-number">\${date.format('D')}</div>
-                        \${dayEvents.map(event => \`
-                            <div class="calendar-event \${event.entry_type || 'other'}" onclick="event.stopPropagation(); editEvent(\${event.id})" title="\${event.title}\n\${event.client_name ? '顧問先: ' + event.client_name : ''}\n\${dayjs(event.start_time).format('HH:mm')}\${event.end_time ? ' - ' + dayjs(event.end_time).format('HH:mm') : ''}">
-                                \${event.title.length > 12 ? event.title.substring(0, 12) + '...' : event.title}
+                calendarHtml += `
+                    <div class="${dayClass}" onclick="selectDate('${date.format('YYYY-MM-DD')}')" data-date="${date.format('YYYY-MM-DD')}">
+                        <div class="day-number">${date.format('D')}</div>
+                        ${dayEvents.map(event => `
+                            <div class="calendar-event ${event.entry_type || 'other'}" onclick="event.stopPropagation(); editEvent(${event.id})" title="${event.title}${event.client_name ? '\\n顧問先: ' + event.client_name : ''}\\n${dayjs(event.start_time).format('HH:mm')}${event.end_time ? ' - ' + dayjs(event.end_time).format('HH:mm') : ''}">
+                                ${event.title.length > 12 ? event.title.substring(0, 12) + '...' : event.title}
                             </div>
-                        \`).join('')}
+                        `).join('')}
                     </div>
-                \`;
+                `;
                 
                 date = date.add(1, 'day');
             }
@@ -508,10 +508,10 @@ export function getSchedulePage(userName: string, userRole: string): string {
                        e.entry_type === 'visit';
             });
 
-            document.getElementById('todayEvents').textContent = \`\${todayEvents.length}件\`;
-            document.getElementById('weekMeetings').textContent = \`\${weekMeetings.length}件\`;
-            document.getElementById('nextWeekDeadlines').textContent = \`\${nextWeekDeadlines.length}件\`;
-            document.getElementById('monthlyVisits').textContent = \`\${monthlyVisits.length}件\`;
+            document.getElementById('todayEvents').textContent = `${todayEvents.length}件`;
+            document.getElementById('weekMeetings').textContent = `${weekMeetings.length}件`;
+            document.getElementById('nextWeekDeadlines').textContent = `${nextWeekDeadlines.length}件`;
+            document.getElementById('monthlyVisits').textContent = `${monthlyVisits.length}件`;
         }
 
         // Modal functions
@@ -537,7 +537,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
             const isEditing = currentEditingEventId !== null;
             
             submitButton.disabled = true;
-            submitButton.innerHTML = \`<span class="loading-spinner"></span> \${isEditing ? '更新中...' : '登録中...'}\`;
+            submitButton.innerHTML = `<span class="loading-spinner"></span> ${isEditing ? '更新中...' : '登録中...'}`;
             
             const formData = new FormData(e.target);
             const eventData = Object.fromEntries(formData);
@@ -549,7 +549,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 let response;
                 if (isEditing) {
                     // Update existing event
-                    response = await axios.put(\`/api/schedule/\${currentEditingEventId}\`, eventData);
+                    response = await axios.put(`/api/schedule/${currentEditingEventId}`, eventData);
                     console.log('Schedule update response:', response.data);
                 } else {
                     // Create new event
@@ -563,7 +563,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
             } catch (error) {
                 console.error('Error saving event:', error);
                 const errorMsg = error.response?.data?.error || (isEditing ? '予定の更新に失敗しました' : '予定の登録に失敗しました');
-                const debugInfo = error.response?.data?.debug ? \` (詳細: \${error.response.data.debug})\` : '';
+                const debugInfo = error.response?.data?.debug ? ` (詳細: ${error.response.data.debug})` : '';
                 showToast(errorMsg + debugInfo, 'error', 5000);
             } finally {
                 submitButton.disabled = false;
@@ -626,7 +626,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
 
         // Add loading spinner CSS
         const style = document.createElement('style');
-        style.textContent = \`
+        style.textContent = `
             .loading-spinner {
                 display: inline-block;
                 width: 16px;
@@ -637,7 +637,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 animation: spin 1s ease-in-out infinite;
             }
             @keyframes spin { to { transform: rotate(360deg); } }
-        \`;
+        `;
         document.head.appendChild(style);
     </script>
 </body>
