@@ -490,7 +490,7 @@ export function getSubsidiesPage(userName: string): string {
                                     </div>
                                     <div>
                                         <div class="text-gray-600">最大支給額</div>
-                                        <div class="font-medium">¥\${(app.max_amount || 0).toLocaleString()}</div>
+                                        <div class="font-medium">¥\${(app.subsidy_max_amount || 0).toLocaleString()}</div>
                                     </div>
                                     <div>
                                         <div class="text-gray-600">提出期限</div>
@@ -504,10 +504,10 @@ export function getSubsidiesPage(userName: string): string {
                                 <div class="mb-2">
                                     <div class="flex justify-between text-sm text-gray-600 mb-1">
                                         <span>進捗</span>
-                                        <span>\${app.progress || 0}%</span>
+                                        <span>\${app.total_items > 0 ? Math.round((app.completed_items / app.total_items) * 100) : 0}%</span>
                                     </div>
                                     <div class="progress-bar">
-                                        <div class="progress-fill" style="width: \${app.progress || 0}%"></div>
+                                        <div class="progress-fill" style="width: \${app.total_items > 0 ? Math.round((app.completed_items / app.total_items) * 100) : 0}%"></div>
                                     </div>
                                 </div>
                                 

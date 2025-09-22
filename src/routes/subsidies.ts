@@ -138,13 +138,23 @@ subsidiesRouter.get('/applications', async (c) => {
       })
     }
 
-    // Query with JOIN to get client and subsidy information
+    // Query with JOIN to get client and subsidy information including progress
     const result = await c.env.DB.prepare(`
       SELECT 
         sa.*,
         c.name as client_name,
         s.name as subsidy_name,
-        s.max_amount as subsidy_max_amount
+        s.max_amount as subsidy_max_amount,
+        (
+          SELECT COUNT(*) 
+          FROM subsidy_checklists sc 
+          WHERE sc.application_id = sa.id AND sc.is_completed = 1
+        ) as completed_items,
+        (
+          SELECT COUNT(*) 
+          FROM subsidy_checklists sc 
+          WHERE sc.application_id = sa.id
+        ) as total_items
       FROM subsidy_applications sa
       LEFT JOIN clients c ON sa.client_id = c.id
       LEFT JOIN subsidies s ON sa.subsidy_id = s.id
