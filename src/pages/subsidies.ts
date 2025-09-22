@@ -969,14 +969,14 @@ export function getSubsidiesPage(userName: string): string {
                                 <div class="lg:col-span-2">
                                     <div class="bg-white border rounded-lg p-6 mb-6">
                                         <h3 class="text-lg font-semibold mb-4">申請情報</h3>
-                                        <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div class="grid grid-cols-2 gap-4 text-sm mb-4">
                                             <div>
                                                 <span class="text-gray-600">申請金額:</span>
                                                 <span class="ml-2 font-medium">¥\${(app.amount_requested || 0).toLocaleString()}</span>
                                             </div>
                                             <div>
                                                 <span class="text-gray-600">最大支給額:</span>
-                                                <span class="ml-2 font-medium">¥\${(app.max_amount || 0).toLocaleString()}</span>
+                                                <span class="ml-2 font-medium">¥\${(app.subsidy_max_amount || 0).toLocaleString()}</span>
                                             </div>
                                             <div>
                                                 <span class="text-gray-600">提出期限:</span>
@@ -984,7 +984,25 @@ export function getSubsidiesPage(userName: string): string {
                                             </div>
                                             <div>
                                                 <span class="text-gray-600">管理機関:</span>
-                                                <span class="ml-2 font-medium">\${escapeHtml(app.managing_organization)}</span>
+                                                <span class="ml-2 font-medium">\${escapeHtml(app.managing_organization || '')}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- ステータス変更 -->
+                                        <div class="border-t pt-4">
+                                            <div class="flex items-center gap-4">
+                                                <label class="text-gray-600 font-medium">ステータス:</label>
+                                                <select id="statusSelect" class="border rounded-md px-3 py-1 text-sm" onchange="updateApplicationStatus(\${app.id}, this.value)">
+                                                    <option value="planning" \${app.status === 'planning' ? 'selected' : ''}>計画中</option>
+                                                    <option value="preparing" \${app.status === 'preparing' ? 'selected' : ''}>準備中</option>
+                                                    <option value="document_check" \${app.status === 'document_check' ? 'selected' : ''}>書類確認中</option>
+                                                    <option value="submitted" \${app.status === 'submitted' ? 'selected' : ''}>申請済み</option>
+                                                    <option value="under_review" \${app.status === 'under_review' ? 'selected' : ''}>審査中</option>
+                                                    <option value="approved" \${app.status === 'approved' ? 'selected' : ''}>承認</option>
+                                                    <option value="rejected" \${app.status === 'rejected' ? 'selected' : ''}>却下</option>
+                                                    <option value="received" \${app.status === 'received' ? 'selected' : ''}>受給済み</option>
+                                                    <option value="cancelled" \${app.status === 'cancelled' ? 'selected' : ''}>取り下げ</option>
+                                                </select>
                                             </div>
                                         </div>
                                         
@@ -1079,6 +1097,48 @@ export function getSubsidiesPage(userName: string): string {
             // 申請詳細モーダルを閉じる
             function closeApplicationDetailModal() {
                 document.getElementById('applicationDetailModal').classList.add('hidden');
+            }
+            
+            // ステータス更新
+            async function updateApplicationStatus(applicationId, newStatus) {
+                try {
+                    const response = await axios.put(\`/api/subsidies/applications/\${applicationId}\`, {
+                        status: newStatus
+                    });
+                    
+                    if (response.data.success) {
+                        // ステータス変更成功のメッセージ
+                        const statusNames = {
+                            'planning': '計画中',
+                            'preparing': '準備中', 
+                            'document_check': '書類確認中',
+                            'submitted': '申請済み',
+                            'under_review': '審査中',
+                            'approved': '承認',
+                            'rejected': '却下',
+                            'received': '受給済み',
+                            'cancelled': '取り下げ'
+                        };
+                        
+                        // 小さな成功メッセージを表示
+                        const message = document.createElement('div');
+                        message.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-md shadow-lg z-50';
+                        message.textContent = \`ステータスを「\${statusNames[newStatus]}」に変更しました\`;
+                        document.body.appendChild(message);
+                        
+                        setTimeout(() => {
+                            message.remove();
+                        }, 3000);
+                        
+                        // リストを更新
+                        loadApplications();
+                    }
+                } catch (error) {
+                    console.error('Status update error:', error);
+                    alert('ステータスの更新に失敗しました');
+                    // セレクトボックスを元に戻す
+                    location.reload();
+                }
             }
             
             // 進捗保存
