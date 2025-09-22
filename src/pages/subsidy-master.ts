@@ -291,6 +291,44 @@ export const subsidyMasterPage = html`
     let currentPage = 1;
     let currentFilters = {};
 
+    // Global functions (must be outside DOMContentLoaded for onclick to work)
+    function showAddSubsidyModal() {
+      try {
+        console.log('showAddSubsidyModal called');
+        
+        const modalTitle = document.getElementById('subsidyModalTitle');
+        const subsidyForm = document.getElementById('subsidyForm');
+        const subsidyId = document.getElementById('subsidyId');
+        const isActive = document.getElementById('is_active');
+        const periodDates = document.getElementById('applicationPeriodDates');
+        const modalElement = document.getElementById('subsidyModal');
+        
+        if (!modalTitle || !subsidyForm || !subsidyId || !isActive || !periodDates || !modalElement) {
+          console.error('Required modal elements not found');
+          alert('モーダル要素が見つかりません。ページを再読み込みしてください。');
+          return;
+        }
+        
+        modalTitle.textContent = '新規助成金登録';
+        subsidyForm.reset();
+        subsidyId.value = '';
+        isActive.checked = true;
+        periodDates.style.display = 'none';
+        
+        // Bootstrap 5の場合
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+          const modal = new bootstrap.Modal(modalElement);
+          modal.show();
+        } else {
+          console.error('Bootstrap Modal not available');
+          alert('Bootstrap Modal が利用できません。ページを再読み込みしてください。');
+        }
+      } catch (error) {
+        console.error('Error in showAddSubsidyModal:', error);
+        alert('モーダル表示でエラーが発生しました: ' + error.message);
+      }
+    }
+
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
       loadSubsidies();
@@ -312,6 +350,15 @@ export const subsidyMasterPage = html`
           periodDates.style.display = 'none';
         }
       });
+      
+      // Make functions globally accessible for onclick handlers
+      window.showAddSubsidyModal = showAddSubsidyModal;
+      window.searchSubsidies = searchSubsidies;
+      window.saveSubsidy = saveSubsidy;
+      window.editSubsidy = editSubsidy;
+      window.deleteSubsidy = deleteSubsidy;
+      window.viewSubsidyDetail = viewSubsidyDetail;
+      window.loadSubsidies = loadSubsidies;
     });
 
     async function loadCategories() {
@@ -473,17 +520,6 @@ export const subsidyMasterPage = html`
         status: document.getElementById('statusFilter').value
       };
       loadSubsidies(1);
-    }
-
-    function showAddSubsidyModal() {
-      document.getElementById('subsidyModalTitle').textContent = '新規助成金登録';
-      document.getElementById('subsidyForm').reset();
-      document.getElementById('subsidyId').value = '';
-      document.getElementById('is_active').checked = true;
-      document.getElementById('applicationPeriodDates').style.display = 'none';
-      
-      const modal = new bootstrap.Modal(document.getElementById('subsidyModal'));
-      modal.show();
     }
 
     async function editSubsidy(subsidyId) {
