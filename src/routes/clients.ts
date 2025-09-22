@@ -166,21 +166,34 @@ clientsRouter.delete('/:id/templates/:templateId', async (c) => {
 clientsRouter.delete('/:id', async (c) => {
   try {
     const clientId = c.req.param('id')
+    console.log(`Starting deletion process for client ID: ${clientId}`)
     
     // Check if client exists
-    const client = await c.env.DB.prepare(`
-      SELECT * FROM clients WHERE id = ?
-    `).bind(clientId).first()
+    let client
+    try {
+      client = await c.env.DB.prepare(`SELECT * FROM clients WHERE id = ?`).bind(clientId).first()
+      console.log(`Client lookup result:`, client)
+    } catch (error) {
+      console.error('Error checking client existence:', error)
+      return c.json({ error: 'クライアント存在確認でエラーが発生しました', debug: error.message }, 500)
+    }
     
     if (!client) {
       return c.json({ error: '顧問先が見つかりません' }, 404)
     }
     
-    // Check for active tasks
-    const activeTasks = await c.env.DB.prepare(`
-      SELECT COUNT(*) as count FROM tasks 
-      WHERE client_id = ? AND status != 'completed'
-    `).bind(clientId).first()
+    // Check for active tasks (with error handling)
+    let activeTasks
+    try {
+      activeTasks = await c.env.DB.prepare(`
+        SELECT COUNT(*) as count FROM tasks 
+        WHERE client_id = ? AND status != 'completed'
+      `).bind(clientId).first()
+      console.log(`Active tasks check:`, activeTasks)
+    } catch (error) {
+      console.warn('Tasks table might not exist or query failed:', error)
+      activeTasks = { count: 0 } // Default to 0 if table doesn't exist
+    }
     
     if (activeTasks && activeTasks.count > 0) {
       return c.json({ 
@@ -189,11 +202,18 @@ clientsRouter.delete('/:id', async (c) => {
       }, 400)
     }
     
-    // Check for future schedule entries
-    const futureSchedules = await c.env.DB.prepare(`
-      SELECT COUNT(*) as count FROM schedule_entries 
-      WHERE client_id = ? AND start_time > datetime('now')
-    `).bind(clientId).first()
+    // Check for future schedule entries (with error handling)
+    let futureSchedules
+    try {
+      futureSchedules = await c.env.DB.prepare(`
+        SELECT COUNT(*) as count FROM schedule_entries 
+        WHERE client_id = ? AND start_time > datetime('now')
+      `).bind(clientId).first()
+      console.log(`Future schedules check:`, futureSchedules)
+    } catch (error) {
+      console.warn('Schedule_entries table might not exist or query failed:', error)
+      futureSchedules = { count: 0 } // Default to 0 if table doesn't exist
+    }
     
     if (futureSchedules && futureSchedules.count > 0) {
       return c.json({ 
@@ -202,21 +222,51 @@ clientsRouter.delete('/:id', async (c) => {
       }, 400)
     }
     
-    // Proceed with deletion
-    // Delete related records first
-    await c.env.DB.prepare(`DELETE FROM client_task_templates WHERE client_id = ?`).bind(clientId).run()
-    await c.env.DB.prepare(`DELETE FROM tasks WHERE client_id = ?`).bind(clientId).run()
-    await c.env.DB.prepare(`DELETE FROM schedule_entries WHERE client_id = ?`).bind(clientId).run()
+    // Proceed with deletion - only delete from tables that exist
+    console.log('Starting deletion of related records...')
     
-    // Delete the client
-    await c.env.DB.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId).run()
+    // Try to delete from client_task_templates (optional table)
+    try {
+      await c.env.DB.prepare(`DELETE FROM client_task_templates WHERE client_id = ?`).bind(clientId).run()
+      console.log('Deleted from client_task_templates')
+    } catch (error) {
+      console.warn('Failed to delete from client_task_templates (table might not exist):', error)
+    }
+    
+    // Try to delete from tasks (optional table)
+    try {
+      await c.env.DB.prepare(`DELETE FROM tasks WHERE client_id = ?`).bind(clientId).run()
+      console.log('Deleted from tasks')
+    } catch (error) {
+      console.warn('Failed to delete from tasks (table might not exist):', error)
+    }
+    
+    // Try to delete from schedule_entries (optional table)
+    try {
+      await c.env.DB.prepare(`DELETE FROM schedule_entries WHERE client_id = ?`).bind(clientId).run()
+      console.log('Deleted from schedule_entries')
+    } catch (error) {
+      console.warn('Failed to delete from schedule_entries (table might not exist):', error)
+    }
+    
+    // Delete the client (this table should exist)
+    try {
+      await c.env.DB.prepare(`DELETE FROM clients WHERE id = ?`).bind(clientId).run()
+      console.log('Successfully deleted client')
+    } catch (error) {
+      console.error('Failed to delete client:', error)
+      return c.json({ error: 'クライアントの削除に失敗しました', debug: error.message }, 500)
+    }
     
     return c.json({ 
       success: true,
       message: '顧問先を削除しました'
     })
   } catch (error) {
-    console.error('Error deleting client:', error)
-    return c.json({ error: '顧問先の削除に失敗しました' }, 500)
+    console.error('Unexpected error during client deletion:', error)
+    return c.json({ 
+      error: '顧問先の削除中に予期しないエラーが発生しました', 
+      debug: error.message 
+    }, 500)
   }
 })
