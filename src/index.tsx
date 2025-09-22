@@ -17,6 +17,7 @@ import { getSettingsPage } from './pages/settings'
 import { getSubsidiesPage } from './pages/subsidies'
 import { getSchedulePage } from './pages/schedule'
 import { getTasksPage } from './pages/tasks'
+import { getBusinessManagementPage } from './pages/business'
 
 // TypeScript types for Cloudflare bindings
 type Bindings = {
@@ -1127,13 +1128,13 @@ app.get('/', async (c) => {
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <!-- 業務管理 (統合版) -->
-                <a href="/tasks" class="group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 border-2 border-transparent hover:border-blue-300 shadow-lg hover:shadow-xl">
+                <a href="/business" class="group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 border-2 border-transparent hover:border-blue-300 shadow-lg hover:shadow-xl">
                     <div class="text-center">
                         <div class="bg-blue-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                            <i class="fas fa-clipboard-list text-white text-3xl"></i>
+                            <i class="fas fa-briefcase text-white text-3xl"></i>
                         </div>
                         <h4 class="text-2xl font-bold text-gray-900 mb-3">業務管理</h4>
-                        <p class="text-gray-600">今日のやること・予定・進捗をまとめて管理</p>
+                        <p class="text-gray-600">タスク・予定・進捗を統合して効率的に管理</p>
                         <div class="mt-4 flex justify-center space-x-4 text-sm text-gray-500">
                             <span><i class="fas fa-tasks mr-1"></i>タスク</span>
                             <span><i class="fas fa-calendar mr-1"></i>予定</span>
@@ -1613,9 +1614,28 @@ app.get('/calendar', async (c) => {
   return c.html(getSchedulePage(payload.name, payload.role || 'user'))
 })
 
+// Unified Business Management page (core feature consolidation)
+app.get('/business', async (c) => {
+  const token = getCookie(c, 'auth-token')
+  
+  if (!token) {
+    return c.redirect('/login')
+  }
+  
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  const payload = await verifyToken(token, jwtSecret)
+  
+  if (!payload) {
+    return c.redirect('/login')
+  }
+  
+  return c.html(getBusinessManagementPage(payload))
+})
+
 // Redirect old routes to simplified structure
 app.get('/schedule', async (c) => c.redirect('/calendar'))
-app.get('/projects', async (c) => c.redirect('/tasks'))
+app.get('/projects', async (c) => c.redirect('/business'))
+app.get('/tasks', async (c) => c.redirect('/business'))
 app.get('/gmail', async (c) => c.redirect('/'))
 app.get('/admin', async (c) => c.redirect('/'))
 
