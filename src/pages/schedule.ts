@@ -508,14 +508,24 @@ export function getSchedulePage(userName: string, userRole: string): string {
             const formData = new FormData(e.target);
             const eventData = Object.fromEntries(formData);
             
+            // Add user_id if not present (for now, use a default value)
+            if (!eventData.user_id) {
+                eventData.user_id = 1; // Default user ID
+            }
+            
+            console.log('Submitting event data:', eventData);
+            
             try {
-                await axios.post('/api/schedule', eventData);
+                const response = await axios.post('/api/schedule', eventData);
+                console.log('Schedule creation response:', response.data);
                 closeNewEventModal();
                 await loadScheduleEvents();
-                showToast('予定を登録しました', 'success');
+                showToast(response.data.message || '予定を登録しました', 'success');
             } catch (error) {
                 console.error('Error creating event:', error);
-                showToast(error.response?.data?.error || '予定の登録に失敗しました', 'error');
+                const errorMsg = error.response?.data?.error || '予定の登録に失敗しました';
+                const debugInfo = error.response?.data?.debug ? \` (詳細: \${error.response.data.debug})\` : '';
+                showToast(errorMsg + debugInfo, 'error', 5000);
             } finally {
                 submitButton.disabled = false;
                 submitButton.textContent = originalText;

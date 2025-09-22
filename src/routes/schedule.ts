@@ -10,27 +10,38 @@ scheduleRouter.get('/', async (c) => {
     const endDate = c.req.query('end_date') || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const userId = c.req.query('user_id')
     
-    let query = `
-      SELECT se.*, c.name as client_name, c.company_name
-      FROM schedule_entries se
-      LEFT JOIN clients c ON se.client_id = c.id
-      WHERE se.start_time >= ? AND se.start_time <= ?
-    `
-    const params = [startDate, endDate + 'T23:59:59']
+    console.log(`Loading schedule entries from ${startDate} to ${endDate}`)
     
-    if (userId) {
-      query += ' AND se.user_id = ?'
-      params.push(userId)
+    // Check if schedule_entries table exists by trying a simple query first
+    let result
+    try {
+      let query = `
+        SELECT se.*, c.name as client_name, c.company_name
+        FROM schedule_entries se
+        LEFT JOIN clients c ON se.client_id = c.id
+        WHERE se.start_time >= ? AND se.start_time <= ?
+      `
+      const params = [startDate, endDate + 'T23:59:59']
+      
+      if (userId) {
+        query += ' AND se.user_id = ?'
+        params.push(userId)
+      }
+      
+      query += ' ORDER BY se.start_time ASC'
+      
+      result = await c.env.DB.prepare(query).bind(...params).all()
+      console.log(`Successfully loaded ${result.results?.length || 0} schedule entries`)
+    } catch (dbError) {
+      console.warn('Schedule_entries table might not exist or query failed:', dbError)
+      // Return empty array if table doesn't exist
+      return c.json([])
     }
-    
-    query += ' ORDER BY se.start_time ASC'
-    
-    const result = await c.env.DB.prepare(query).bind(...params).all()
     
     return c.json(result.results || [])
   } catch (error) {
-    console.error('Error fetching schedule entries:', error)
-    return c.json({ error: 'Failed to fetch schedule' }, 500)
+    console.error('Unexpected error fetching schedule entries:', error)
+    return c.json({ error: 'Failed to fetch schedule', debug: error.message }, 500)
   }
 })
 
@@ -39,12 +50,18 @@ scheduleRouter.get('/:id', async (c) => {
   try {
     const id = c.req.param('id')
     
-    const entry = await c.env.DB.prepare(`
-      SELECT se.*, c.name as client_name, c.company_name
-      FROM schedule_entries se
-      LEFT JOIN clients c ON se.client_id = c.id
-      WHERE se.id = ?
-    `).bind(id).first()
+    let entry
+    try {
+      entry = await c.env.DB.prepare(`
+        SELECT se.*, c.name as client_name, c.company_name
+        FROM schedule_entries se
+        LEFT JOIN clients c ON se.client_id = c.id
+        WHERE se.id = ?
+      `).bind(id).first()
+    } catch (dbError) {
+      console.warn('Schedule_entries table might not exist:', dbError)
+      return c.json({ error: 'Schedule entry not found' }, 404)
+    }
     
     if (!entry) {
       return c.json({ error: 'Schedule entry not found' }, 404)
@@ -53,7 +70,7 @@ scheduleRouter.get('/:id', async (c) => {
     return c.json(entry)
   } catch (error) {
     console.error('Error fetching schedule entry:', error)
-    return c.json({ error: 'Failed to fetch schedule entry' }, 500)
+    return c.json({ error: 'Failed to fetch schedule entry', debug: error.message }, 500)
   }
 })
 
@@ -66,24 +83,53 @@ scheduleRouter.post('/', async (c) => {
       start_time, end_time, location, is_recurring, recurrence_pattern
     } = body
     
-    const result = await c.env.DB.prepare(`
-      INSERT INTO schedule_entries 
-      (user_id, client_id, title, description, entry_type, start_time, end_time, location, is_recurring, recurrence_pattern)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      user_id, client_id, title, description, entry_type,
-      start_time, end_time, location, is_recurring ? 1 : 0,
-      recurrence_pattern ? JSON.stringify(recurrence_pattern) : null
-    ).run()
+    console.log('Creating schedule entry:', { title, entry_type, start_time })
     
-    return c.json({ 
-      id: result.meta.last_row_id,
-      success: true,
-      message: 'スケジュールを登録しました'
-    })
+    // Validate required fields
+    if (!title || !start_time) {
+      return c.json({ error: 'タイトルと開始時刻は必須です' }, 400)
+    }
+    
+    // Try to create schedule entry, but handle table not existing
+    try {
+      const result = await c.env.DB.prepare(`
+        INSERT INTO schedule_entries 
+        (user_id, client_id, title, description, entry_type, start_time, end_time, location, is_recurring, recurrence_pattern, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).bind(
+        user_id || null, 
+        client_id || null, 
+        title, 
+        description || null, 
+        entry_type || 'other',
+        start_time, 
+        end_time || null, 
+        location || null, 
+        is_recurring ? 1 : 0,
+        recurrence_pattern ? JSON.stringify(recurrence_pattern) : null
+      ).run()
+      
+      console.log('Successfully created schedule entry:', result.meta.last_row_id)
+      
+      return c.json({ 
+        id: result.meta.last_row_id,
+        success: true,
+        message: 'スケジュールを登録しました'
+      })
+    } catch (dbError) {
+      console.error('Database error creating schedule entry:', dbError)
+      return c.json({ 
+        error: 'スケジュールテーブルが存在しないか、データベースエラーが発生しました',
+        debug: dbError.message 
+      }, 500)
+    }
+    
   } catch (error) {
-    console.error('Error creating schedule entry:', error)
-    return c.json({ error: 'Failed to create schedule entry' }, 500)
+    console.error('Unexpected error creating schedule entry:', error)
+    return c.json({ 
+      error: 'スケジュール作成中に予期しないエラーが発生しました', 
+      debug: error.message 
+    }, 500)
   }
 })
 
@@ -144,19 +190,25 @@ scheduleRouter.get('/upcoming/summary', async (c) => {
     const now = new Date().toISOString()
     const weekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
     
-    const result = await c.env.DB.prepare(`
-      SELECT se.*, c.name as client_name, c.company_name
-      FROM schedule_entries se
-      LEFT JOIN clients c ON se.client_id = c.id
-      WHERE se.start_time >= ? AND se.start_time <= ?
-      ORDER BY se.start_time ASC
-      LIMIT 10
-    `).bind(now, weekLater).all()
+    let result
+    try {
+      result = await c.env.DB.prepare(`
+        SELECT se.*, c.name as client_name, c.company_name
+        FROM schedule_entries se
+        LEFT JOIN clients c ON se.client_id = c.id
+        WHERE se.start_time >= ? AND se.start_time <= ?
+        ORDER by se.start_time ASC
+        LIMIT 10
+      `).bind(now, weekLater).all()
+    } catch (dbError) {
+      console.warn('Schedule_entries table might not exist:', dbError)
+      return c.json([])
+    }
     
     return c.json(result.results || [])
   } catch (error) {
     console.error('Error fetching upcoming entries:', error)
-    return c.json({ error: 'Failed to fetch upcoming entries' }, 500)
+    return c.json({ error: 'Failed to fetch upcoming entries', debug: error.message }, 500)
   }
 })
 
