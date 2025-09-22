@@ -365,15 +365,19 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 const startOfMonth = currentDate.startOf('month').format('YYYY-MM-DD');
                 const endOfMonth = currentDate.endOf('month').format('YYYY-MM-DD');
                 
+                console.log(\`Loading schedule events: \${startOfMonth} to \${endOfMonth}\`);
                 const response = await axios.get(\`/api/schedule?start_date=\${startOfMonth}&end_date=\${endOfMonth}\`);
+                console.log('Schedule response:', response.data);
                 scheduleEvents = response.data || [];
                 
                 renderCalendar();
                 updateStats();
             } catch (error) {
                 console.error('Failed to load schedule:', error);
+                console.error('Error details:', error.response?.data);
                 scheduleEvents = [];
                 renderCalendar();
+                showToast(\`スケジュール読み込みエラー: \${error.response?.data?.error || error.message}\`, 'error', 5000);
             }
         }
 

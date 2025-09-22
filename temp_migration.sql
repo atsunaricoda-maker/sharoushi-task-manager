@@ -13,7 +13,3 @@ CREATE TABLE IF NOT EXISTS schedule_entries (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX IF NOT EXISTS idx_schedule_entries_start_time ON schedule_entries(start_time);
-CREATE INDEX IF NOT EXISTS idx_schedule_entries_client_id ON schedule_entries(client_id);
-CREATE INDEX IF NOT EXISTS idx_schedule_entries_user_id ON schedule_entries(user_id);
