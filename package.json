@@ -9,7 +9,7 @@
     "preview": "wrangler pages dev dist",
     "deploy": "npm run build && wrangler pages deploy dist",
     "deploy:prod": "npm run build && wrangler pages deploy dist --project-name sharoushi-task-manager",
-    "deploy:cloudflare": "npm run build && npx wrangler pages deploy dist --project-name sharoushi-task-manager --compatibility-date=2024-01-01",
+    "deploy:cloudflare": "npm run build && wrangler pages deploy dist --project-name sharoushi-task-manager",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:migrate:local": "wrangler d1 migrations apply sharoushi-task-manager-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply sharoushi-task-manager-db --remote",
