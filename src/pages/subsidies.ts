@@ -359,6 +359,7 @@ export function getSubsidiesPage(userName: string): string {
         </style>
 
         <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
         <script>
             let subsidies = [];
             let applications = [];
@@ -366,11 +367,263 @@ export function getSubsidiesPage(userName: string): string {
             
             // 初期化
             document.addEventListener('DOMContentLoaded', () => {
+                loadDashboardAnalytics();
                 loadApplications();
                 loadSubsidies();
                 loadClients();
                 loadAlerts();
             });
+
+            // ダッシュボード分析データを読み込み
+            async function loadDashboardAnalytics() {
+                try {
+                    const response = await axios.get('/api/subsidies/dashboard/analytics');
+                    if (response.data.success) {
+                        const analytics = response.data.analytics;
+                        updateDashboardStats(analytics.overview);
+                        updateDashboardCharts(analytics);
+                        updateRecentActivity(analytics.recentActivity);
+                        updateUpcomingDeadlines(analytics.upcomingDeadlines);
+                    }
+                } catch (error) {
+                    console.error('Dashboard analytics loading error:', error);
+                }
+            }
+
+            // ダッシュボード統計の更新
+            function updateDashboardStats(overview) {
+                const formatCurrency = (amount) => {
+                    if (!amount) return '¥0';
+                    return '¥' + new Intl.NumberFormat('ja-JP').format(Math.round(amount));
+                };
+
+                // Update stats cards if they exist
+                const updateElement = (id, value) => {
+                    const element = document.getElementById(id);
+                    if (element) element.textContent = value;
+                };
+
+                updateElement('totalApplications', overview.total_applications || 0);
+                updateElement('approvedApplications', overview.successful_applications || 0);
+                updateElement('inReviewApplications', overview.under_review || 0);
+                updateElement('receivedAmount', formatCurrency(overview.total_received_amount));
+                updateElement('successRate', overview.success_rate + '%');
+                updateElement('avgAmount', formatCurrency(overview.avg_received_amount));
+            }
+
+            // チャートの更新
+            function updateDashboardCharts(analytics) {
+                // ステータス分布チャート
+                const statusChart = document.getElementById('statusChart');
+                if (statusChart && analytics.statusDistribution) {
+                    createStatusChart(statusChart, analytics.statusDistribution);
+                }
+
+                // 月別推移チャート
+                const monthlyChart = document.getElementById('monthlyChart');
+                if (monthlyChart && analytics.monthlyTrends) {
+                    createMonthlyChart(monthlyChart, analytics.monthlyTrends);
+                }
+            }
+
+            // ステータス分布チャート作成
+            function createStatusChart(canvas, statusData) {
+                const statusLabels = {
+                    'planning': '計画中',
+                    'preparing': '準備中',
+                    'document_check': '書類確認中',
+                    'submitted': '申請済み',
+                    'under_review': '審査中',
+                    'approved': '承認',
+                    'rejected': '却下',
+                    'received': '受給済み',
+                    'cancelled': '取り下げ'
+                };
+
+                const statusColors = {
+                    'planning': '#6c757d',
+                    'preparing': '#0dcaf0',
+                    'document_check': '#fd7e14',
+                    'submitted': '#0d6efd',
+                    'under_review': '#ffc107',
+                    'approved': '#198754',
+                    'rejected': '#dc3545',
+                    'received': '#20c997',
+                    'cancelled': '#6f42c1'
+                };
+
+                new Chart(canvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: statusData.map(item => statusLabels[item.status] || item.status),
+                        datasets: [{
+                            data: statusData.map(item => item.count),
+                            backgroundColor: statusData.map(item => statusColors[item.status] || '#6c757d'),
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const status = statusData[context.dataIndex];
+                                        return statusLabels[status.status] + ': ' + status.count + '件 (' + status.percentage + '%)';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 月別推移チャート作成
+            function createMonthlyChart(canvas, monthlyData) {
+                new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: monthlyData.map(item => item.month),
+                        datasets: [
+                            {
+                                label: '申請数',
+                                data: monthlyData.map(item => item.applications_created),
+                                borderColor: '#0d6efd',
+                                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: '成功数',
+                                data: monthlyData.map(item => item.applications_successful),
+                                borderColor: '#198754',
+                                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                                fill: false,
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 最近の活動更新
+            function updateRecentActivity(recentActivity) {
+                const container = document.getElementById('recentActivity');
+                if (!container) return;
+
+                if (!recentActivity || recentActivity.length === 0) {
+                    container.innerHTML = '<p class="text-muted">最近の活動がありません</p>';
+                    return;
+                }
+
+                const statusLabels = {
+                    'planning': '計画中',
+                    'preparing': '準備中',
+                    'document_check': '書類確認中',
+                    'submitted': '申請済み',
+                    'under_review': '審査中',
+                    'approved': '承認',
+                    'rejected': '却下',
+                    'received': '受給済み',
+                    'cancelled': '取り下げ'
+                };
+
+                const statusBadges = {
+                    'planning': 'secondary',
+                    'preparing': 'info',
+                    'document_check': 'warning',
+                    'submitted': 'primary',
+                    'under_review': 'warning',
+                    'approved': 'success',
+                    'rejected': 'danger',
+                    'received': 'success',
+                    'cancelled': 'dark'
+                };
+
+                container.innerHTML = recentActivity.map(activity => `
+                    <div class="d-flex align-items-center mb-3 pb-2 border-bottom">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">${activity.subsidy_name}</h6>
+                            <small class="text-muted">
+                                <i class="fas fa-building me-1"></i>${activity.client_name}
+                                <span class="ms-2">
+                                    <i class="fas fa-clock me-1"></i>${formatRelativeTime(activity.updated_at)}
+                                </span>
+                            </small>
+                        </div>
+                        <span class="badge bg-${statusBadges[activity.status]}">${statusLabels[activity.status]}</span>
+                    </div>
+                `).join('');
+            }
+
+            // 締切間近の更新
+            function updateUpcomingDeadlines(upcomingDeadlines) {
+                const container = document.getElementById('upcomingDeadlines');
+                if (!container) return;
+
+                if (!upcomingDeadlines || upcomingDeadlines.length === 0) {
+                    container.innerHTML = '<p class="text-muted">締切間近の案件はありません</p>';
+                    return;
+                }
+
+                container.innerHTML = upcomingDeadlines.map(deadline => {
+                    const daysLeft = deadline.days_until_deadline;
+                    const urgencyClass = daysLeft <= 7 ? 'danger' : daysLeft <= 14 ? 'warning' : 'info';
+                    
+                    return `
+                        <div class="d-flex align-items-center mb-3 pb-2 border-bottom">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">${deadline.subsidy_name}</h6>
+                                <small class="text-muted">
+                                    <i class="fas fa-building me-1"></i>${deadline.client_name}
+                                </small>
+                                <div class="mt-1">
+                                    <small class="text-${urgencyClass}">
+                                        <i class="fas fa-calendar-times me-1"></i>${daysLeft}日後
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // 相対時間フォーマット
+            function formatRelativeTime(dateString) {
+                const now = new Date();
+                const date = new Date(dateString);
+                const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
+                
+                if (diffInHours < 1) return '1時間以内';
+                if (diffInHours < 24) return `${diffInHours}時間前`;
+                
+                const diffInDays = Math.floor(diffInHours / 24);
+                if (diffInDays < 7) return `${diffInDays}日前`;
+                
+                return date.toLocaleDateString('ja-JP');
+            }
             
             // タブ切り替え
             function switchTab(tabName) {

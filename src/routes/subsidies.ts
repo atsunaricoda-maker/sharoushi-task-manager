@@ -1181,6 +1181,244 @@ subsidiesRouter.put('/applications/:id/checklist/reorder', async (c) => {
   }
 })
 
+// ===== ダッシュボード・アナリティクス エンドポイント =====
+
+// Get dashboard analytics for subsidies
+subsidiesRouter.get('/dashboard/analytics', async (c) => {
+  try {
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Get overall statistics
+    const overallStats = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_applications,
+        COUNT(CASE WHEN status IN ('approved', 'received') THEN 1 END) as successful_applications,
+        COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_applications,
+        COUNT(CASE WHEN status IN ('planning', 'preparing') THEN 1 END) as in_preparation,
+        COUNT(CASE WHEN status IN ('submitted', 'under_review') THEN 1 END) as under_review,
+        SUM(CASE WHEN amount_received > 0 THEN amount_received ELSE 0 END) as total_received_amount,
+        AVG(CASE WHEN amount_received > 0 THEN amount_received ELSE NULL END) as avg_received_amount,
+        COUNT(CASE WHEN submission_deadline IS NOT NULL AND DATE(submission_deadline) <= DATE('now', '+30 days') THEN 1 END) as upcoming_deadlines
+      FROM subsidy_applications
+      WHERE created_by = ?
+    `).bind(userId).first()
+    
+    // Get status distribution
+    const statusDistribution = await c.env.DB.prepare(`
+      SELECT 
+        status,
+        COUNT(*) as count,
+        ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM subsidy_applications WHERE created_by = ?), 1) as percentage
+      FROM subsidy_applications
+      WHERE created_by = ?
+      GROUP BY status
+      ORDER BY count DESC
+    `).bind(userId, userId).all()
+    
+    // Get monthly trends (last 12 months)
+    const monthlyTrends = await c.env.DB.prepare(`
+      SELECT 
+        strftime('%Y-%m', created_at) as month,
+        COUNT(*) as applications_created,
+        COUNT(CASE WHEN status IN ('approved', 'received') THEN 1 END) as applications_successful,
+        SUM(CASE WHEN amount_received > 0 THEN amount_received ELSE 0 END) as amount_received
+      FROM subsidy_applications
+      WHERE created_by = ? 
+        AND created_at >= DATE('now', '-12 months')
+      GROUP BY strftime('%Y-%m', created_at)
+      ORDER BY month ASC
+    `).bind(userId).all()
+    
+    // Get top subsidies by application count
+    const topSubsidies = await c.env.DB.prepare(`
+      SELECT 
+        s.name as subsidy_name,
+        s.category,
+        COUNT(sa.id) as application_count,
+        COUNT(CASE WHEN sa.status IN ('approved', 'received') THEN 1 END) as success_count,
+        SUM(CASE WHEN sa.amount_received > 0 THEN sa.amount_received ELSE 0 END) as total_received
+      FROM subsidies s
+      INNER JOIN subsidy_applications sa ON s.id = sa.subsidy_id
+      WHERE sa.created_by = ?
+      GROUP BY s.id, s.name, s.category
+      ORDER BY application_count DESC
+      LIMIT 10
+    `).bind(userId).all()
+    
+    // Get recent activity
+    const recentActivity = await c.env.DB.prepare(`
+      SELECT 
+        sa.*,
+        s.name as subsidy_name,
+        c.name as client_name
+      FROM subsidy_applications sa
+      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
+      LEFT JOIN clients c ON sa.client_id = c.id
+      WHERE sa.created_by = ?
+      ORDER BY sa.updated_at DESC
+      LIMIT 10
+    `).bind(userId).all()
+    
+    // Get upcoming deadlines
+    const upcomingDeadlines = await c.env.DB.prepare(`
+      SELECT 
+        sa.*,
+        s.name as subsidy_name,
+        c.name as client_name,
+        DATE(sa.submission_deadline) - DATE('now') as days_until_deadline
+      FROM subsidy_applications sa
+      LEFT JOIN subsidies s ON sa.subsidy_id = s.id  
+      LEFT JOIN clients c ON sa.client_id = c.id
+      WHERE sa.created_by = ?
+        AND sa.submission_deadline IS NOT NULL
+        AND DATE(sa.submission_deadline) >= DATE('now')
+        AND DATE(sa.submission_deadline) <= DATE('now', '+60 days')
+      ORDER BY sa.submission_deadline ASC
+      LIMIT 10
+    `).bind(userId).all()
+    
+    // Calculate success rate
+    const totalApps = overallStats?.total_applications || 0
+    const successfulApps = overallStats?.successful_applications || 0
+    const successRate = totalApps > 0 ? Math.round((successfulApps / totalApps) * 100) : 0
+    
+    return c.json({
+      success: true,
+      analytics: {
+        overview: {
+          ...overallStats,
+          success_rate: successRate
+        },
+        statusDistribution: statusDistribution.results || [],
+        monthlyTrends: monthlyTrends.results || [],
+        topSubsidies: topSubsidies.results || [],
+        recentActivity: recentActivity.results || [],
+        upcomingDeadlines: upcomingDeadlines.results || []
+      }
+    })
+  } catch (error) {
+    console.error('Error getting analytics:', error)
+    return c.json({ 
+      error: 'Failed to get analytics',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Get progress summary for all applications
+subsidiesRouter.get('/dashboard/progress-summary', async (c) => {
+  try {
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    // Get applications with progress calculation
+    const applications = await c.env.DB.prepare(`
+      SELECT 
+        sa.*,
+        s.name as subsidy_name,
+        c.name as client_name,
+        COUNT(sc.id) as total_checklist_items,
+        COUNT(CASE WHEN sc.is_completed = 1 THEN 1 END) as completed_items
+      FROM subsidy_applications sa
+      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
+      LEFT JOIN clients c ON sa.client_id = c.id
+      LEFT JOIN subsidy_checklists sc ON sa.id = sc.application_id
+      WHERE sa.created_by = ?
+      GROUP BY sa.id
+      ORDER BY sa.updated_at DESC
+    `).bind(userId).all()
+    
+    // Calculate progress percentage for each application
+    const applicationsWithProgress = (applications.results || []).map(app => {
+      const totalItems = app.total_checklist_items || 0
+      const completedItems = app.completed_items || 0
+      const progressPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
+      
+      return {
+        ...app,
+        progress_percent: progressPercent,
+        checklist_progress: {
+          total: totalItems,
+          completed: completedItems,
+          remaining: totalItems - completedItems
+        }
+      }
+    })
+    
+    return c.json({
+      success: true,
+      applications: applicationsWithProgress
+    })
+  } catch (error) {
+    console.error('Error getting progress summary:', error)
+    return c.json({ 
+      error: 'Failed to get progress summary',
+      debug: error.message 
+    }, 500)
+  }
+})
+
+// Get category-wise performance
+subsidiesRouter.get('/dashboard/category-performance', async (c) => {
+  try {
+    const user = c.get('user')
+    
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    
+    const categoryPerformance = await c.env.DB.prepare(`
+      SELECT 
+        s.category,
+        COUNT(sa.id) as total_applications,
+        COUNT(CASE WHEN sa.status IN ('approved', 'received') THEN 1 END) as successful_applications,
+        COUNT(CASE WHEN sa.status = 'rejected' THEN 1 END) as rejected_applications,
+        SUM(CASE WHEN sa.amount_received > 0 THEN sa.amount_received ELSE 0 END) as total_received_amount,
+        AVG(CASE WHEN sa.amount_received > 0 THEN sa.amount_received ELSE NULL END) as avg_received_amount,
+        MIN(sa.created_at) as first_application_date,
+        MAX(sa.created_at) as latest_application_date
+      FROM subsidies s
+      INNER JOIN subsidy_applications sa ON s.id = sa.subsidy_id
+      WHERE sa.created_by = ?
+      GROUP BY s.category
+      ORDER BY total_applications DESC
+    `).bind(userId).all()
+    
+    // Calculate success rates for each category
+    const categoryWithRates = (categoryPerformance.results || []).map(cat => ({
+      ...cat,
+      success_rate: cat.total_applications > 0 ? 
+        Math.round((cat.successful_applications / cat.total_applications) * 100) : 0,
+      rejection_rate: cat.total_applications > 0 ? 
+        Math.round((cat.rejected_applications / cat.total_applications) * 100) : 0
+    }))
+    
+    return c.json({
+      success: true,
+      categoryPerformance: categoryWithRates
+    })
+  } catch (error) {
+    console.error('Error getting category performance:', error)
+    return c.json({ 
+      error: 'Failed to get category performance',
+      debug: error.message 
+    }, 500)
+  }
+})
+
 // Search subsidies with filters
 subsidiesRouter.get('/search', async (c) => {
   try {
