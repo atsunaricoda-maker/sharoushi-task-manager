@@ -1509,9 +1509,9 @@ export function getSubsidiesPage(userName: string): string {
                 });
             }
 
-            // 助成金登録モーダル表示（未実装）
+            // 助成金登録ページへリダイレクト
             function showAddSubsidyModal() {
-                alert('助成金登録機能は実装予定です');
+                window.location.href = '/subsidy-master';
             }
 
             // 更新履歴追加
