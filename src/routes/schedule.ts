@@ -157,23 +157,39 @@ scheduleRouter.post('/', async (c) => {
     
     // Verify user exists in database and get actual user ID
     let actualUserId = userId
+    const userEmail = user?.email || payload?.email
+    
+    if (!userEmail) {
+      console.error('No email found in user context:', { user, payload })
+      return c.json({ 
+        error: 'ユーザーメールアドレスが見つかりません', 
+        debug: 'No email in auth context'
+      }, 400)
+    }
+    
     try {
-      // Try to find user by email if userId lookup fails
-      const userEmail = user?.email || payload?.email
-      if (userEmail) {
-        const dbUser = await c.env.DB.prepare(`
-          SELECT id FROM users WHERE email = ?
-        `).bind(userEmail).first()
-        
-        if (dbUser) {
-          actualUserId = dbUser.id
-          console.log('Found user in database:', dbUser.id, 'for email:', userEmail)
-        } else {
-          console.log('User not found in database for email:', userEmail, 'using token userId:', userId)
-        }
+      // Always verify user exists by email for production safety
+      const dbUser = await c.env.DB.prepare(`
+        SELECT id, email, name FROM users WHERE email = ?
+      `).bind(userEmail).first()
+      
+      if (!dbUser) {
+        console.error('User not found in database for email:', userEmail)
+        return c.json({ 
+          error: 'ユーザーがデータベースに存在しません。管理者にお問い合わせください。', 
+          debug: `User not found for email: ${userEmail}`
+        }, 400)
       }
+      
+      actualUserId = dbUser.id
+      console.log('Verified user in database:', { id: dbUser.id, email: dbUser.email, name: dbUser.name })
+      
     } catch (userLookupError) {
-      console.warn('User lookup failed, using token userId:', userLookupError)
+      console.error('Database user lookup error:', userLookupError)
+      return c.json({ 
+        error: 'ユーザー情報の取得に失敗しました', 
+        debug: userLookupError.message
+      }, 500)
     }
     
     // Try to create schedule entry, but handle table not existing
