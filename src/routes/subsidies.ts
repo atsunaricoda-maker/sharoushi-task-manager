@@ -539,55 +539,117 @@ subsidiesRouter.get('/master/:id', async (c) => {
     const subsidyId = c.req.param('id')
     const user = c.get('user')
     
+    console.log('Getting subsidy detail for ID:', subsidyId, 'User:', user?.sub)
+    
     if (!user) {
       return c.json({ error: 'User not authenticated' }, 401)
     }
     
-    const subsidy = await c.env.DB.prepare(`
-      SELECT s.*,
-        COUNT(DISTINCT sa.id) as application_count,
-        COUNT(DISTINCT CASE WHEN sa.status IN ('approved', 'received') THEN sa.id END) as success_count,
-        AVG(CASE WHEN sa.amount_received > 0 THEN sa.amount_received END) as avg_received_amount
-      FROM subsidies s
-      LEFT JOIN subsidy_applications sa ON s.id = sa.subsidy_id
-      WHERE s.id = ?
-      GROUP BY s.id
-    `).bind(subsidyId).first()
+    if (!c.env.DB) {
+      console.error('Database not available')
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    // First, check if the subsidies table exists and get basic subsidy data
+    let subsidy
+    try {
+      subsidy = await c.env.DB.prepare(`
+        SELECT * FROM subsidies WHERE id = ?
+      `).bind(subsidyId).first()
+      
+      console.log('Basic subsidy query result:', subsidy)
+    } catch (basicError) {
+      console.error('Error in basic subsidy query:', basicError)
+      return c.json({ 
+        error: 'Failed to query subsidies table',
+        debug: basicError.message 
+      }, 500)
+    }
     
     if (!subsidy) {
+      console.log('Subsidy not found for ID:', subsidyId)
       return c.json({ error: 'Subsidy not found' }, 404)
     }
     
-    // Get recent applications
-    const recentApplications = await c.env.DB.prepare(`
-      SELECT sa.*, c.name as client_name
-      FROM subsidy_applications sa
-      LEFT JOIN clients c ON sa.client_id = c.id
-      WHERE sa.subsidy_id = ?
-      ORDER BY sa.created_at DESC
-      LIMIT 10
-    `).bind(subsidyId).all()
+    // Try to get application count - handle case where subsidy_applications table might not exist
+    let applicationCount = 0
+    let successCount = 0
+    let avgReceivedAmount = null
     
-    // Get templates
-    const templates = await c.env.DB.prepare(`
-      SELECT * FROM subsidy_templates
-      WHERE subsidy_id = ?
-      ORDER BY created_at DESC
-    `).bind(subsidyId).all()
+    try {
+      const stats = await c.env.DB.prepare(`
+        SELECT 
+          COUNT(DISTINCT sa.id) as application_count,
+          COUNT(DISTINCT CASE WHEN sa.status IN ('approved', 'received') THEN sa.id END) as success_count,
+          AVG(CASE WHEN sa.amount_received > 0 THEN sa.amount_received END) as avg_received_amount
+        FROM subsidy_applications sa
+        WHERE sa.subsidy_id = ?
+      `).bind(subsidyId).first()
+      
+      if (stats) {
+        applicationCount = stats.application_count || 0
+        successCount = stats.success_count || 0
+        avgReceivedAmount = stats.avg_received_amount
+      }
+    } catch (statsError) {
+      console.log('Warning: Could not get application stats, table may not exist:', statsError.message)
+      // Continue without stats - this is not a fatal error
+    }
     
-    return c.json({
+    // Try to get recent applications - handle case where tables might not exist
+    let recentApplications = []
+    try {
+      const applications = await c.env.DB.prepare(`
+        SELECT sa.*, c.name as client_name
+        FROM subsidy_applications sa
+        LEFT JOIN clients c ON sa.client_id = c.id
+        WHERE sa.subsidy_id = ?
+        ORDER BY sa.created_at DESC
+        LIMIT 10
+      `).bind(subsidyId).all()
+      
+      recentApplications = applications.results || []
+    } catch (applicationsError) {
+      console.log('Warning: Could not get recent applications:', applicationsError.message)
+      // Continue without recent applications - this is not a fatal error
+    }
+    
+    // Try to get templates - handle case where subsidy_templates table might not exist
+    let templates = []
+    try {
+      const templatesResult = await c.env.DB.prepare(`
+        SELECT * FROM subsidy_templates
+        WHERE subsidy_id = ?
+        ORDER BY created_at DESC
+      `).bind(subsidyId).all()
+      
+      templates = templatesResult.results || []
+    } catch (templatesError) {
+      console.log('Warning: Could not get templates:', templatesError.message)
+      // Continue without templates - this is not a fatal error
+    }
+    
+    const result = {
       success: true,
       subsidy: {
         ...subsidy,
-        recent_applications: recentApplications.results || [],
-        templates: templates.results || []
+        application_count: applicationCount,
+        success_count: successCount,
+        avg_received_amount: avgReceivedAmount,
+        recent_applications: recentApplications,
+        templates: templates
       }
-    })
+    }
+    
+    console.log('Returning subsidy detail result:', result)
+    return c.json(result)
+    
   } catch (error) {
     console.error('Error getting subsidy detail:', error)
     return c.json({ 
       error: 'Failed to get subsidy',
-      debug: error.message 
+      debug: error.message,
+      stack: error.stack
     }, 500)
   }
 })
@@ -1422,6 +1484,19 @@ subsidiesRouter.get('/dashboard/category-performance', async (c) => {
 // Search subsidies with filters
 subsidiesRouter.get('/search', async (c) => {
   try {
+    console.log('Searching subsidies with filters')
+    
+    if (!c.env.DB) {
+      console.error('Database not available')
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    const keyword = c.req.query('keyword')
+    const category = c.req.query('category')
+    const minAmount = c.req.query('minAmount')
+    
+    console.log('Search filters:', { keyword, category, minAmount })
+    
     let query = `
       SELECT s.*, 
         CASE 
@@ -1434,8 +1509,11 @@ subsidiesRouter.get('/search', async (c) => {
     `
     const params = []
     
-    const category = c.req.query('category')
-    const minAmount = c.req.query('minAmount')
+    if (keyword) {
+      query += ` AND (s.name LIKE ? OR s.description LIKE ?)`
+      const keywordParam = `%${keyword}%`
+      params.push(keywordParam, keywordParam)
+    }
     
     if (category) {
       query += ` AND s.category = ?`
@@ -1449,7 +1527,11 @@ subsidiesRouter.get('/search', async (c) => {
     
     query += ` ORDER BY s.application_end_date ASC, s.max_amount DESC`
     
+    console.log('Executing query:', query, 'with params:', params)
+    
     const result = await c.env.DB.prepare(query).bind(...params).all()
+    
+    console.log('Search result:', result?.results?.length, 'records found')
     
     return c.json({
       success: true,
@@ -1457,7 +1539,11 @@ subsidiesRouter.get('/search', async (c) => {
     })
   } catch (error) {
     console.error('Error searching subsidies:', error)
-    return c.json({ error: 'Failed to search subsidies' }, 500)
+    return c.json({ 
+      error: 'Failed to search subsidies',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
   }
 })
 
@@ -1898,28 +1984,80 @@ subsidiesRouter.get('/search-external', async (c) => {
 // Get subsidy database (for admin tab)
 subsidiesRouter.get('/database', async (c) => {
   try {
-    const result = await c.env.DB.prepare(`
-      SELECT 
-        s.*,
-        COUNT(sa.id) as application_count,
-        CASE 
-          WHEN s.application_end_date IS NULL THEN 'ongoing'
-          WHEN date(s.application_end_date) < date('now') THEN 'expired'
-          ELSE 'active'
-        END as status
-      FROM subsidies s
-      LEFT JOIN subsidy_applications sa ON s.id = sa.subsidy_id
-      GROUP BY s.id
-      ORDER BY s.updated_at DESC
-    `).all()
+    console.log('Getting subsidy database')
+    
+    if (!c.env.DB) {
+      console.error('Database not available')
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    // First try to get basic subsidies data
+    let result
+    try {
+      result = await c.env.DB.prepare(`
+        SELECT * FROM subsidies 
+        ORDER BY updated_at DESC
+      `).all()
+      
+      console.log('Basic subsidies query result:', result?.results?.length, 'records')
+    } catch (basicError) {
+      console.error('Error in basic subsidies query:', basicError)
+      return c.json({ 
+        error: 'Failed to query subsidies table',
+        debug: basicError.message 
+      }, 500)
+    }
+    
+    // Try to enhance with application counts and status
+    let enhancedSubsidies = []
+    if (result?.results) {
+      for (const subsidy of result.results) {
+        let applicationCount = 0
+        
+        // Try to get application count for this subsidy
+        try {
+          const countResult = await c.env.DB.prepare(`
+            SELECT COUNT(*) as count FROM subsidy_applications WHERE subsidy_id = ?
+          `).bind(subsidy.id).first()
+          
+          applicationCount = countResult?.count || 0
+        } catch (countError) {
+          console.log('Warning: Could not get application count for subsidy', subsidy.id, ':', countError.message)
+        }
+        
+        // Calculate status
+        let status = 'ongoing'
+        if (subsidy.application_end_date) {
+          const endDate = new Date(subsidy.application_end_date)
+          const now = new Date()
+          if (endDate < now) {
+            status = 'expired'
+          } else {
+            status = 'active'
+          }
+        }
+        
+        enhancedSubsidies.push({
+          ...subsidy,
+          application_count: applicationCount,
+          status: status
+        })
+      }
+    }
+    
+    console.log('Enhanced subsidies result:', enhancedSubsidies.length, 'records')
     
     return c.json({
       success: true,
-      subsidies: result.results || []
+      subsidies: enhancedSubsidies
     })
   } catch (error) {
     console.error('Error fetching subsidy database:', error)
-    return c.json({ error: 'Failed to fetch subsidy database' }, 500)
+    return c.json({ 
+      error: 'Failed to fetch subsidy database',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
   }
 })
 
