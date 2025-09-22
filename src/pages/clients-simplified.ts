@@ -444,14 +444,19 @@ export function getSimplifiedClientsPage(userName: string): string {
             try {
                 currentClientId = clientId;
                 
-                // Load client details and contact history
-                const [clientRes, contactsRes] = await Promise.all([
-                    axios.get(\`/api/clients/\${clientId}\`),
-                    axios.get(\`/api/clients/\${clientId}/contacts\`)
-                ]);
-                
+                // Load client details first
+                const clientRes = await axios.get(\`/api/clients/\${clientId}\`);
                 const client = clientRes.data.client;
-                const contacts = contactsRes.data.contacts || [];
+                
+                // Try to load contact history, but don't fail if it doesn't work
+                let contacts = [];
+                try {
+                    const contactsRes = await axios.get(\`/api/clients/\${clientId}/contacts\`);
+                    contacts = contactsRes.data.contacts || [];
+                } catch (contactError) {
+                    console.warn('Failed to load contact history:', contactError);
+                    // Continue with empty contacts array - graceful degradation
+                }
                 
                 // Update modal title
                 document.getElementById('clientDetailTitle').textContent = client.name + ' - 詳細';
@@ -649,9 +654,14 @@ export function getSimplifiedClientsPage(userName: string): string {
                 await axios.post('/api/contacts', contactData);
                 closeAddContactModal();
                 
-                // Refresh contact history
-                const contactsRes = await axios.get(\`/api/clients/\${currentClientId}/contacts\`);
-                renderContactHistory(contactsRes.data.contacts || []);
+                // Refresh contact history (graceful degradation if it fails)
+                try {
+                    const contactsRes = await axios.get(\`/api/clients/\${currentClientId}/contacts\`);
+                    renderContactHistory(contactsRes.data.contacts || []);
+                } catch (refreshError) {
+                    console.warn('Failed to refresh contact history:', refreshError);
+                    renderContactHistory([]); // Show empty state if refresh fails
+                }
                 
                 showToast('連絡記録を追加しました', 'success');
             } catch (error) {
