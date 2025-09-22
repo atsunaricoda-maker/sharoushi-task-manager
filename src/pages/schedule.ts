@@ -5,7 +5,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スケジュール管理 - 社労士事務所タスク管理</title>
+    <title>カレンダー - 社労士事務所タスク管理</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
@@ -137,8 +137,8 @@ export function getSchedulePage(userName: string, userRole: string): string {
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center space-x-8">
                     <h1 class="text-2xl font-bold text-gray-900">
-                        <i class="fas fa-calendar-alt mr-2 text-blue-600"></i>
-                        スケジュール管理
+                        <i class="fas fa-calendar mr-2 text-blue-600"></i>
+                        カレンダー
                     </h1>
                     <nav class="flex space-x-4">
                         <a href="/" class="px-3 py-2 text-gray-700 hover:text-gray-900">
@@ -147,8 +147,8 @@ export function getSchedulePage(userName: string, userRole: string): string {
                         <a href="/clients" class="px-3 py-2 text-gray-700 hover:text-gray-900">
                             <i class="fas fa-building mr-1"></i>顧問先
                         </a>
-                        <a href="/schedule" class="px-3 py-2 text-blue-600 font-medium">
-                            <i class="fas fa-calendar-alt mr-1"></i>スケジュール
+                        <a href="/calendar" class="px-3 py-2 text-blue-600 font-medium">
+                            <i class="fas fa-calendar mr-1"></i>カレンダー
                         </a>
                         <a href="/reports" class="px-3 py-2 text-gray-700 hover:text-gray-900">
                             <i class="fas fa-chart-bar mr-1"></i>レポート

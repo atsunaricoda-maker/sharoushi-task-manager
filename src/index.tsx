@@ -239,7 +239,9 @@ app.get('/dev-login', (c) => {
 })
 
 // Mount routers first (before auth middleware)
+// Calendar API (unified schedule functionality)
 app.route('/api/schedule', scheduleRouter)
+app.route('/api/calendar', scheduleRouter) // Alias for calendar functionality
 
 // Apply auth middleware to protected routes
 app.use('/api/tasks/*', checkAuth)
@@ -1162,10 +1164,6 @@ app.get('/', async (c) => {
                     <i class="fas fa-database text-orange-600 text-xl mr-3"></i>
                     <span class="text-gray-900 font-medium">助成金マスター管理</span>
                 </a>
-                <a href="/schedule" class="flex items-center p-4 bg-cyan-50 rounded-lg hover:bg-cyan-100 transition-colors">
-                    <i class="fas fa-calendar-alt text-cyan-600 text-xl mr-3"></i>
-                    <span class="text-gray-900 font-medium">スケジュール管理</span>
-                </a>
                 <a href="/settings" class="flex items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                     <i class="fas fa-cog text-gray-600 text-xl mr-3"></i>
                     <span class="text-gray-900 font-medium">設定</span>
@@ -1612,8 +1610,16 @@ app.get('/gmail', async (c) => {
   return c.html(getGmailPage(payload.name))
 })
 
-// Calendar page
+// Calendar page (unified with schedule functionality)
 app.get('/calendar', async (c) => {
+  // Development environment bypass (only for local testing)
+  const environment = c.env.ENVIRONMENT || 'production'
+  if (environment === 'development') {
+    const testUser = { name: '田中 太郎', role: 'admin' }
+    return c.html(getSchedulePage(testUser.name, testUser.role))
+  }
+  
+  // Production authentication
   const token = getCookie(c, 'auth-token')
   
   if (!token) {
@@ -1627,7 +1633,8 @@ app.get('/calendar', async (c) => {
     return c.redirect('/login')
   }
   
-  return c.html(getCalendarPage(payload.name))
+  // Use schedule page implementation for calendar (unified functionality)
+  return c.html(getSchedulePage(payload.name, payload.role || 'user'))
 })
 
 // Projects page
@@ -1689,30 +1696,9 @@ app.get('/test-schedule', async (c) => {
   return c.text('Test schedule route is working!')
 })
 
-// Schedule page
+// Schedule page - redirect to calendar (unified functionality)
 app.get('/schedule', async (c) => {
-  // Development environment bypass (only for local testing)
-  const environment = c.env.ENVIRONMENT || 'production'
-  if (environment === 'development') {
-    const testUser = { name: '田中 太郎', role: 'admin' }
-    return c.html(getSchedulePage(testUser.name, testUser.role))
-  }
-  
-  // Production authentication
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(getSchedulePage(payload.name, payload.role || 'user'))
+  return c.redirect('/calendar')
 })
 
 // Admin Dashboard page
