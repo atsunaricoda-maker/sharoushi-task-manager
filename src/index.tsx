@@ -128,8 +128,19 @@ app.get('/test-early', (c) => {
   return c.text('Early test route is working!')
 })
 
-// Development auth token generator (public, for testing only) - MUST be before auth middleware
+// Development auth token generator (LOCAL DEVELOPMENT ONLY)
 app.get('/api/dev-auth', async (c) => {
+  // 🚨 SECURITY: Only allow in local development environment
+  const environment = c.env.ENVIRONMENT || 'production'
+  const isLocal = c.req.url.includes('localhost') || c.req.url.includes('127.0.0.1') || environment === 'development'
+  
+  if (!isLocal) {
+    return c.json({ 
+      error: 'Forbidden', 
+      message: 'Development authentication is only available in local development environment' 
+    }, 403)
+  }
+  
   try {
     const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
     const testUser = {
@@ -144,7 +155,7 @@ app.get('/api/dev-auth', async (c) => {
     // Set cookie for testing
     setCookie(c, 'auth-token', token, {
       httpOnly: true,
-      secure: false, // Allow in dev environment
+      secure: false, // Allow in dev environment only
       sameSite: 'Lax',
       maxAge: 24 * 60 * 60 // 24 hours
     })
@@ -164,8 +175,15 @@ app.get('/api/dev-auth', async (c) => {
   }
 })
 
-// Development login page (for testing without Google OAuth) - MUST be before auth middleware  
+// Development login page (LOCAL DEVELOPMENT ONLY)
 app.get('/dev-login', (c) => {
+  // 🚨 SECURITY: Only allow in local development environment
+  const environment = c.env.ENVIRONMENT || 'production'
+  const isLocal = c.req.url.includes('localhost') || c.req.url.includes('127.0.0.1') || environment === 'development'
+  
+  if (!isLocal) {
+    return c.redirect('/login')
+  }
   return c.html(`
 <!DOCTYPE html>
 <html lang="ja">
@@ -280,9 +298,26 @@ app.get('/api/health', async (c) => {
   try {
     const result = await c.env.DB.prepare('SELECT 1 as test').first()
     
-    // Check if dev-auth parameter is present
+    // Check if dev-auth parameter is present (LOCAL DEVELOPMENT ONLY)
     const devAuth = c.req.query('dev-auth')
     if (devAuth === 'true') {
+      // 🚨 SECURITY: Only allow in local development environment
+      const environment = c.env.ENVIRONMENT || 'production'
+      const isLocal = c.req.url.includes('localhost') || c.req.url.includes('127.0.0.1') || environment === 'development'
+      
+      if (!isLocal) {
+        return c.json({ 
+          status: 'healthy',
+          environment: c.env.ENVIRONMENT || 'production',
+          database: result ? 'connected' : 'disconnected',
+          timestamp: new Date().toISOString(),
+          devAuth: {
+            success: false,
+            message: 'Development authentication is only available in local development environment'
+          }
+        })
+      }
+      
       const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
       const testUser = {
         id: 1,
@@ -365,6 +400,12 @@ app.get('/auth/google', (c) => {
   
   if (!c.env.REDIRECT_URI) {
     console.warn('REDIRECT_URI not set, using:', redirectUri)
+  }
+  
+  // Validate that we're not in a broken state
+  if (!clientId) {
+    console.error('No Google Client ID available')
+    return c.redirect('/login?error=oauth_not_configured')
   }
   
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
