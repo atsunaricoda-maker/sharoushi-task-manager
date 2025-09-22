@@ -419,7 +419,9 @@ export function getSchedulePage(userName: string, userRole: string): string {
             const startOfCalendar = startOfMonth.startOf('week');
             const endOfCalendar = endOfMonth.endOf('week');
             
-            let calendarHtml = '';
+            // Clear previous calendar
+            calendarGrid.innerHTML = '';
+            
             let date = startOfCalendar;
             
             while (date.isBefore(endOfCalendar) || date.isSame(endOfCalendar, 'day')) {
@@ -431,21 +433,38 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 if (!isCurrentMonth) dayClass += ' other-month';
                 if (isToday) dayClass += ' today';
                 
-                calendarHtml += `
-                    <div class="${dayClass}" onclick="selectDate('${date.format('YYYY-MM-DD')}')" data-date="${date.format('YYYY-MM-DD')}">
-                        <div class="day-number">${date.format('D')}</div>
-                        ${dayEvents.map(event => `
-                            <div class="calendar-event ${event.entry_type || 'other'}" onclick="event.stopPropagation(); editEvent(${event.id})" title="${event.title}${event.client_name ? '\\n顧問先: ' + event.client_name : ''}\\n${dayjs(event.start_time).format('HH:mm')}${event.end_time ? ' - ' + dayjs(event.end_time).format('HH:mm') : ''}">
-                                ${event.title.length > 12 ? event.title.substring(0, 12) + '...' : event.title}
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
+                // Create day element
+                const dayDiv = document.createElement('div');
+                dayDiv.className = dayClass;
+                dayDiv.setAttribute('data-date', date.format('YYYY-MM-DD'));
+                dayDiv.addEventListener('click', () => selectDate(date.format('YYYY-MM-DD')));
                 
+                // Add day number
+                const dayNumber = document.createElement('div');
+                dayNumber.className = 'day-number';
+                dayNumber.textContent = date.format('D');
+                dayDiv.appendChild(dayNumber);
+                
+                // Add events
+                dayEvents.forEach(event => {
+                    const eventDiv = document.createElement('div');
+                    eventDiv.className = `calendar-event ${event.entry_type || 'other'}`;
+                    eventDiv.textContent = event.title.length > 12 ? event.title.substring(0, 12) + '...' : event.title;
+                    eventDiv.title = `${event.title}${event.client_name ? '\\n顧問先: ' + event.client_name : ''}\\n${dayjs(event.start_time).format('HH:mm')}${event.end_time ? ' - ' + dayjs(event.end_time).format('HH:mm') : ''}`;
+                    
+                    // Add click handler for editing
+                    eventDiv.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        console.log('Event clicked, opening edit modal for event ID:', event.id);
+                        editEvent(event.id);
+                    });
+                    
+                    dayDiv.appendChild(eventDiv);
+                });
+                
+                calendarGrid.appendChild(dayDiv);
                 date = date.add(1, 'day');
             }
-            
-            calendarGrid.innerHTML = calendarHtml;
         }
 
         // Get events for a specific day
@@ -574,12 +593,23 @@ export function getSchedulePage(userName: string, userRole: string): string {
         // Edit existing event
         async function editEvent(eventId) {
             try {
+                console.log('editEvent function called with ID:', eventId);
+                
+                if (!eventId) {
+                    console.error('No event ID provided to editEvent');
+                    showToast('予定IDが見つかりません', 'error');
+                    return;
+                }
+                
                 console.log('Loading event for edit:', eventId);
                 const response = await axios.get(`/api/schedule/${eventId}`);
+                console.log('Event data loaded:', response.data);
                 const event = response.data;
                 
                 // Set modal to edit mode
                 currentEditingEventId = eventId;
+                console.log('Set currentEditingEventId to:', currentEditingEventId);
+                
                 document.getElementById('eventModalTitle').textContent = '予定編集';
                 document.getElementById('submitEventBtn').textContent = '更新';
                 document.getElementById('deleteEventBtn').style.display = 'block';
@@ -594,33 +624,53 @@ export function getSchedulePage(userName: string, userRole: string): string {
                 form.querySelector('input[name="location"]').value = event.location || '';
                 form.querySelector('textarea[name="description"]').value = event.description || '';
                 
+                console.log('Form populated, opening modal');
+                
                 // Open modal
                 document.getElementById('newEventModal').classList.add('active');
                 
+                console.log('Edit modal opened successfully');
+                
             } catch (error) {
                 console.error('Failed to load event for editing:', error);
-                showToast('予定の読み込みに失敗しました', 'error');
+                console.error('Error response:', error.response?.data);
+                const errorMsg = error.response?.data?.error || '予定の読み込みに失敗しました';
+                const debugInfo = error.response?.data?.debug ? ` (詳細: ${error.response.data.debug})` : '';
+                showToast(errorMsg + debugInfo, 'error');
             }
         }
 
         // Delete current event
         async function deleteCurrentEvent() {
-            if (!currentEditingEventId) return;
+            console.log('Delete button clicked, currentEditingEventId:', currentEditingEventId);
+            
+            if (!currentEditingEventId) {
+                console.error('No event ID available for deletion');
+                showToast('削除対象の予定が選択されていません', 'error');
+                return;
+            }
             
             const confirmed = confirm('この予定を削除してもよろしいですか？');
-            if (!confirmed) return;
+            if (!confirmed) {
+                console.log('User cancelled deletion');
+                return;
+            }
+            
+            console.log('Attempting to delete event:', currentEditingEventId);
             
             try {
                 const response = await axios.delete(`/api/schedule/${currentEditingEventId}`);
-                console.log('Event deleted:', response.data);
+                console.log('Event deleted successfully:', response.data);
                 
                 closeEventModal();
                 await loadScheduleEvents();
                 showToast(response.data.message || '予定を削除しました', 'success');
             } catch (error) {
                 console.error('Failed to delete event:', error);
+                console.error('Error details:', error.response?.data);
                 const errorMsg = error.response?.data?.error || '予定の削除に失敗しました';
-                showToast(errorMsg, 'error');
+                const debugInfo = error.response?.data?.debug ? ` (詳細: ${error.response.data.debug})` : '';
+                showToast(errorMsg + debugInfo, 'error');
             }
         }
 
