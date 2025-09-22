@@ -15,7 +15,7 @@ import { getSimplifiedClientsPage } from './pages/clients-simplified'
 import { getReportsPage } from './pages/reports'
 import { getSettingsPage } from './pages/settings'
 // Simplified imports - removed complex features
-import { getSubsidiesPage } from './pages/subsidies'
+import { getUnifiedSubsidiesPage } from './pages/subsidies-unified'
 import { getSchedulePage } from './pages/schedule'
 import { getTasksPage } from './pages/tasks'
 import { getBusinessManagementPage } from './pages/business'
@@ -1657,7 +1657,7 @@ app.get('/subsidies', async (c) => {
     return c.redirect('/login')
   }
   
-  return c.html(getSubsidiesPage(payload.name))
+  return c.html(getUnifiedSubsidiesPage(payload.name))
 })
 
 // Scheduled event handler for Cron Triggers
