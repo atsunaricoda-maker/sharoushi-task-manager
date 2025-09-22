@@ -7,10 +7,11 @@ import { generateToken, verifyToken, getUserByEmail, upsertUser } from './lib/au
 import { GeminiService } from './lib/gemini'
 import { clientsRouter } from './routes/clients'
 import { reportsRouter } from './routes/reports'
+import { contactsRouter } from './routes/contacts'
 // Simplified router imports
 import subsidiesRouter from './routes/subsidies'
 import scheduleRouter from './routes/schedule'
-import { getClientsPage } from './pages/clients'
+import { getSimplifiedClientsPage } from './pages/clients-simplified'
 import { getReportsPage } from './pages/reports'
 import { getSettingsPage } from './pages/settings'
 // Simplified imports - removed complex features
@@ -239,12 +240,14 @@ app.route('/api/calendar', scheduleRouter) // Alias for calendar functionality
 // Simplified auth middleware - only for core functions
 app.use('/api/tasks/*', checkAuth)
 app.use('/api/clients/*', checkAuth)
+app.use('/api/contacts/*', checkAuth)
 app.use('/api/users/*', checkAuth)
 app.use('/api/dashboard/*', checkAuth)
 app.use('/api/subsidies/*', checkAuth)
 
 // Core API routes only
 app.route('/api/clients', clientsRouter)
+app.route('/api/contacts', contactsRouter)
 app.route('/api/reports', reportsRouter)
 app.route('/api/subsidies', subsidiesRouter)
 
@@ -1552,7 +1555,7 @@ app.get('/clients', async (c) => {
     return c.redirect('/login')
   }
   
-  return c.html(getClientsPage(payload.name))
+  return c.html(getSimplifiedClientsPage(payload.name))
 })
 
 // Reports page
