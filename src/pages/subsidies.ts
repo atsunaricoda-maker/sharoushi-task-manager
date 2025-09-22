@@ -119,39 +119,76 @@ export function getSubsidiesPage(userName: string): string {
             <!-- 助成金検索タブ -->
             <div id="subsidies-tab" class="tab-content hidden">
                 <div class="mb-6">
-                    <h2 class="text-2xl font-bold text-gray-900 mb-4">利用可能な助成金</h2>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-gray-900">利用可能な助成金</h2>
+                        <button onclick="showQuickAddSubsidyModal()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            <i class="fas fa-plus mr-2"></i>新規登録
+                        </button>
+                    </div>
                     
                     <!-- 検索フィルター -->
                     <div class="bg-white rounded-lg shadow p-4 mb-6">
-                        <div class="grid grid-cols-3 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">キーワード検索</label>
+                                <input type="text" id="keywordFilter" onchange="searchSubsidies()" 
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                                    placeholder="助成金名で検索">
+                            </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">カテゴリ</label>
-                                <select id="categoryFilter" onchange="searchSubsidies()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                <select id="categoryFilter" onchange="searchSubsidies()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                     <option value="">すべて</option>
                                     <option value="雇用系">雇用系</option>
                                     <option value="育成系">育成系</option>
                                     <option value="福祉系">福祉系</option>
                                     <option value="創業系">創業系</option>
                                     <option value="設備投資系">設備投資系</option>
+                                    <option value="その他">その他</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">最低金額</label>
                                 <input type="number" id="minAmountFilter" onchange="searchSubsidies()" 
-                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" 
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
                                     placeholder="100000">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">顧客</label>
-                                <select id="clientFilterForSearch" onchange="searchSubsidies()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                <select id="clientFilterForSearch" onchange="searchSubsidies()" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                     <option value="">すべて</option>
                                 </select>
                             </div>
                         </div>
+                        <div class="mt-4 flex justify-end">
+                            <button onclick="clearSearchFilters()" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800">
+                                <i class="fas fa-times mr-1"></i>フィルターをクリア
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 助成金統計 -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-blue-50 rounded-lg p-4">
+                            <div class="text-blue-600 text-sm">総助成金数</div>
+                            <div class="text-2xl font-bold text-blue-900" id="totalSubsidiesCount">-</div>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <div class="text-green-600 text-sm">募集中</div>
+                            <div class="text-2xl font-bold text-green-900" id="activeSubsidiesCount">-</div>
+                        </div>
+                        <div class="bg-yellow-50 rounded-lg p-4">
+                            <div class="text-yellow-600 text-sm">平均金額</div>
+                            <div class="text-2xl font-bold text-yellow-900" id="avgSubsidyAmount">-</div>
+                        </div>
+                        <div class="bg-purple-50 rounded-lg p-4">
+                            <div class="text-purple-600 text-sm">今月新規</div>
+                            <div class="text-2xl font-bold text-purple-900" id="newSubsidiesCount">-</div>
+                        </div>
                     </div>
 
                     <!-- 助成金リスト -->
-                    <div id="subsidiesList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div id="subsidiesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <!-- 助成金カードがここに表示されます -->
                     </div>
                 </div>
@@ -172,9 +209,14 @@ export function getSubsidiesPage(userName: string): string {
             <div id="database-tab" class="tab-content hidden">
                 <div class="mb-6 flex justify-between items-center">
                     <h2 class="text-2xl font-bold text-gray-900">助成金データベース</h2>
-                    <button onclick="showAddSubsidyModal()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                        <i class="fas fa-plus mr-2"></i>助成金登録
-                    </button>
+                    <div class="flex gap-2">
+                        <button onclick="showQuickAddSubsidyModal()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            <i class="fas fa-plus mr-2"></i>簡単登録
+                        </button>
+                        <button onclick="showAddSubsidyModal()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                            <i class="fas fa-cogs mr-2"></i>詳細登録
+                        </button>
+                    </div>
                 </div>
 
                 <div id="subsidyDatabaseList" class="bg-white rounded-lg shadow overflow-hidden">
@@ -328,6 +370,85 @@ export function getSubsidiesPage(userName: string): string {
                         <button type="submit" 
                             class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                             作成
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 簡単助成金登録モーダル -->
+        <div id="quickAddSubsidyModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">
+                    <i class="fas fa-plus-circle text-blue-600 mr-2"></i>
+                    助成金を簡単登録
+                </h3>
+                <form onsubmit="createQuickSubsidy(event)">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">助成金名 *</label>
+                            <input type="text" id="quickSubsidyName" required 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="例：キャリアアップ助成金">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">カテゴリ</label>
+                            <select id="quickSubsidyCategory" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">選択してください</option>
+                                <option value="雇用系">雇用系</option>
+                                <option value="育成系">育成系</option>
+                                <option value="福祉系">福祉系</option>
+                                <option value="創業系">創業系</option>
+                                <option value="設備投資系">設備投資系</option>
+                                <option value="その他">その他</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">管理機関</label>
+                            <input type="text" id="quickSubsidyOrg" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="例：厚生労働省">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">最大金額（円）</label>
+                            <input type="number" id="quickSubsidyAmount" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="1000000">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">申請期限</label>
+                            <input type="date" id="quickSubsidyDeadline" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">備考・メモ</label>
+                            <textarea id="quickSubsidyNotes" rows="2" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="特記事項があれば記入"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">公式サイト（任意）</label>
+                            <input type="url" id="quickSubsidyUrl" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" onclick="closeQuickAddSubsidyModal()" 
+                            class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                            キャンセル
+                        </button>
+                        <button type="submit" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            <i class="fas fa-save mr-2"></i>登録
                         </button>
                     </div>
                 </form>
@@ -803,21 +924,57 @@ export function getSubsidiesPage(userName: string): string {
             
             // 助成金検索
             async function searchSubsidies() {
+                const keyword = document.getElementById('keywordFilter').value;
                 const category = document.getElementById('categoryFilter').value;
                 const minAmount = document.getElementById('minAmountFilter').value;
                 const clientId = document.getElementById('clientFilterForSearch').value;
                 
                 try {
                     const params = new URLSearchParams();
+                    if (keyword) params.append('keyword', keyword);
                     if (category) params.append('category', category);
                     if (minAmount) params.append('minAmount', minAmount);
                     if (clientId) params.append('clientId', clientId);
                     
                     const response = await axios.get('/api/subsidies/search?' + params);
                     displaySubsidies(response.data.subsidies);
+                    updateSubsidyStatistics(response.data.subsidies);
                 } catch (error) {
                     console.error('Failed to search subsidies:', error);
+                    // エラー時も統計をクリア
+                    updateSubsidyStatistics([]);
                 }
+            }
+            
+            // フィルタークリア
+            function clearSearchFilters() {
+                document.getElementById('keywordFilter').value = '';
+                document.getElementById('categoryFilter').value = '';
+                document.getElementById('minAmountFilter').value = '';
+                document.getElementById('clientFilterForSearch').value = '';
+                searchSubsidies();
+            }
+            
+            // 助成金統計更新
+            function updateSubsidyStatistics(subsidyList) {
+                const total = subsidyList.length;
+                const active = subsidyList.filter(s => s.status === 'active').length;
+                const amounts = subsidyList.filter(s => s.max_amount > 0).map(s => s.max_amount);
+                const avgAmount = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
+                
+                // 今月新規（created_atが今月のもの）
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                const newThisMonth = subsidyList.filter(s => {
+                    if (!s.created_at) return false;
+                    const createdDate = new Date(s.created_at);
+                    return createdDate.getMonth() === currentMonth && createdDate.getFullYear() === currentYear;
+                }).length;
+                
+                document.getElementById('totalSubsidiesCount').textContent = total;
+                document.getElementById('activeSubsidiesCount').textContent = active;
+                document.getElementById('avgSubsidyAmount').textContent = avgAmount > 0 ? '¥' + Math.round(avgAmount).toLocaleString() : '-';
+                document.getElementById('newSubsidiesCount').textContent = newThisMonth;
             }
             
             // 助成金表示
@@ -825,30 +982,97 @@ export function getSubsidiesPage(userName: string): string {
                 const container = document.getElementById('subsidiesList');
                 
                 if (subsidyList.length === 0) {
-                    container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">該当する助成金がありません</div>';
+                    container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-12">' +
+                        '<i class="fas fa-search text-4xl text-gray-300 mb-4"></i><br>' +
+                        '該当する助成金がありません<br>' +
+                        '<button onclick="showQuickAddSubsidyModal()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">' +
+                        '<i class="fas fa-plus mr-2"></i>新規登録' +
+                        '</button>' +
+                        '</div>';
                     return;
                 }
                 
-                container.innerHTML = subsidyList.map(subsidy => \`
-                    <div class="bg-white rounded-lg shadow p-6">
-                        <h4 class="font-medium text-gray-900 mb-2">\${escapeHtml(subsidy.name)}</h4>
-                        <div class="text-sm text-gray-600 space-y-2">
-                            <div><i class="fas fa-tag mr-2"></i>\${escapeHtml(subsidy.category)}</div>
-                            <div><i class="fas fa-building mr-2"></i>\${escapeHtml(subsidy.managingOrganization)}</div>
-                            <div><i class="fas fa-yen-sign mr-2"></i>最大 ¥\${(subsidy.maxAmount || 0).toLocaleString()}</div>
-                            <div><i class="fas fa-percentage mr-2"></i>助成率 \${subsidy.subsidyRate}%</div>
-                            \${subsidy.applicationEndDate ? \`
-                                <div class="text-red-600">
-                                    <i class="fas fa-calendar-times mr-2"></i>期限: \${formatDate(subsidy.applicationEndDate)}
+                container.innerHTML = subsidyList.map(subsidy => {
+                    const isExpired = subsidy.application_end_date && new Date(subsidy.application_end_date) < new Date();
+                    const daysLeft = subsidy.application_end_date 
+                        ? Math.ceil((new Date(subsidy.application_end_date) - new Date()) / (1000 * 60 * 60 * 24))
+                        : null;
+                    
+                    return \`
+                        <div class="bg-white rounded-lg shadow hover:shadow-lg transition-shadow border-l-4 \${
+                            isExpired ? 'border-red-500' : 
+                            daysLeft && daysLeft <= 30 ? 'border-yellow-500' : 'border-blue-500'
+                        }">
+                            <div class="p-6">
+                                <div class="flex justify-between items-start mb-3">
+                                    <h4 class="font-semibold text-gray-900 text-lg leading-tight">\${escapeHtml(subsidy.name)}</h4>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium \${
+                                        isExpired ? 'bg-red-100 text-red-800' :
+                                        subsidy.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                                    }">
+                                        \${isExpired ? '期限切れ' : subsidy.status === 'active' ? '募集中' : '常時募集'}
+                                    </span>
                                 </div>
-                            \` : ''}
+                                
+                                <div class="space-y-2 mb-4">
+                                    \${subsidy.category ? \`
+                                        <div class="flex items-center text-sm text-gray-600">
+                                            <i class="fas fa-tag w-4 text-blue-500 mr-2"></i>
+                                            <span class="font-medium">\${escapeHtml(subsidy.category)}</span>
+                                        </div>
+                                    \` : ''}
+                                    
+                                    \${subsidy.managing_organization ? \`
+                                        <div class="flex items-center text-sm text-gray-600">
+                                            <i class="fas fa-building w-4 text-green-500 mr-2"></i>
+                                            \${escapeHtml(subsidy.managing_organization)}
+                                        </div>
+                                    \` : ''}
+                                    
+                                    \${subsidy.max_amount ? \`
+                                        <div class="flex items-center text-sm font-semibold text-gray-900">
+                                            <i class="fas fa-yen-sign w-4 text-yellow-500 mr-2"></i>
+                                            最大 ¥\${subsidy.max_amount.toLocaleString()}
+                                            \${subsidy.subsidy_rate ? \`<span class="ml-2 text-xs text-gray-500">(\${subsidy.subsidy_rate}%)</span>\` : ''}
+                                        </div>
+                                    \` : ''}
+                                    
+                                    \${subsidy.application_end_date ? \`
+                                        <div class="flex items-center text-sm \${daysLeft && daysLeft <= 30 ? 'text-orange-600 font-medium' : 'text-gray-600'}">
+                                            <i class="fas fa-calendar-times w-4 \${daysLeft && daysLeft <= 30 ? 'text-orange-500' : 'text-red-500'} mr-2"></i>
+                                            期限: \${formatDate(subsidy.application_end_date)}
+                                            \${daysLeft !== null && daysLeft >= 0 ? \` (あと\${daysLeft}日)\` : ''}
+                                        </div>
+                                    \` : ''}
+                                </div>
+                                
+                                \${subsidy.description ? \`
+                                    <p class="text-sm text-gray-600 mb-4 line-clamp-2">\${escapeHtml(subsidy.description).substring(0, 100)}\${subsidy.description.length > 100 ? '...' : ''}</p>
+                                \` : ''}
+                                
+                                <div class="flex gap-2">
+                                    <button onclick="selectSubsidyForApplication(\${subsidy.id})" 
+                                        class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors \${isExpired ? 'opacity-50 cursor-not-allowed' : ''}"
+                                        \${isExpired ? 'disabled' : ''}>
+                                        <i class="fas fa-plus-circle mr-2"></i>申請作成
+                                    </button>
+                                    <button onclick="editSubsidyInline(\${subsidy.id})" 
+                                        class="px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm transition-colors"
+                                        title="編集">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    \${subsidy.url ? \`
+                                        <a href="\${subsidy.url}" target="_blank" 
+                                            class="px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm transition-colors"
+                                            title="公式サイト">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                    \` : ''}
+                                </div>
+                            </div>
                         </div>
-                        <button onclick="selectSubsidyForApplication(\${subsidy.id})" 
-                            class="mt-4 w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
-                            この助成金を申請
-                        </button>
-                    </div>
-                \`).join('');
+                    \`;
+                }).join('');
             }
             
             // 期限アラート読み込み
@@ -1140,42 +1364,62 @@ export function getSubsidiesPage(userName: string): string {
                     }
                     
                     container.innerHTML = 
+                        '<div class="overflow-x-auto">' +
                         '<table class="min-w-full divide-y divide-gray-200">' +
                             '<thead class="bg-gray-50">' +
                                 '<tr>' +
-                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">助成金名</th>' +
-                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">カテゴリ</th>' +
-                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">管理機関</th>' +
-                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最大金額</th>' +
-                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請数</th>' +
-                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>' +
+                                    '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">助成金名</th>' +
+                                    '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">カテゴリ</th>' +
+                                    '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">管理機関</th>' +
+                                    '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最大金額</th>' +
+                                    '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>' +
+                                    '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>' +
                                 '</tr>' +
                             '</thead>' +
                             '<tbody class="bg-white divide-y divide-gray-200">' +
                                 subsidies.map(subsidy => 
                                     '<tr class="hover:bg-gray-50">' +
-                                        '<td class="px-6 py-4 whitespace-nowrap">' +
+                                        '<td class="px-4 py-4">' +
                                             '<div class="text-sm font-medium text-gray-900">' + escapeHtml(subsidy.name) + '</div>' +
-                                            (subsidy.url ? '<a href="' + subsidy.url + '" target="_blank" class="text-xs text-blue-600 hover:underline">詳細を見る</a>' : '') +
+                                            (subsidy.url ? '<a href="' + subsidy.url + '" target="_blank" class="text-xs text-blue-600 hover:underline"><i class="fas fa-external-link-alt mr-1"></i>詳細</a>' : '') +
                                         '</td>' +
-                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + escapeHtml(subsidy.category) + '</td>' +
-                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + escapeHtml(subsidy.managing_organization) + '</td>' +
-                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">' +
-                                            (subsidy.max_amount ? '¥' + subsidy.max_amount.toLocaleString() : '-') +
+                                        '<td class="px-4 py-4">' +
+                                            '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ' +
+                                                'bg-blue-100 text-blue-800">' + escapeHtml(subsidy.category || '未分類') + '</span>' +
                                         '</td>' +
-                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + subsidy.application_count + '件</td>' +
-                                        '<td class="px-6 py-4 whitespace-nowrap">' +
-                                            '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ' +
+                                        '<td class="px-4 py-4 text-sm text-gray-900">' + escapeHtml(subsidy.managing_organization || '未設定') + '</td>' +
+                                        '<td class="px-4 py-4 text-sm font-medium text-gray-900">' +
+                                            (subsidy.max_amount ? '¥' + subsidy.max_amount.toLocaleString() : '<span class="text-gray-400">未設定</span>') +
+                                        '</td>' +
+                                        '<td class="px-4 py-4">' +
+                                            '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ' +
                                                 (subsidy.status === 'active' ? 'bg-green-100 text-green-800' : 
                                                   subsidy.status === 'expired' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800') + '">' +
                                                 (subsidy.status === 'active' ? '募集中' : 
                                                   subsidy.status === 'expired' ? '期限切れ' : '常時募集') +
                                             '</span>' +
                                         '</td>' +
+                                        '<td class="px-4 py-4 text-sm font-medium">' +
+                                            '<div class="flex space-x-2">' +
+                                                '<button onclick="editSubsidyInline(' + subsidy.id + ')" ' +
+                                                    'class="text-blue-600 hover:text-blue-900" title="編集">' +
+                                                    '<i class="fas fa-edit"></i>' +
+                                                '</button>' +
+                                                '<button onclick="selectSubsidyForApplication(' + subsidy.id + ')" ' +
+                                                    'class="text-green-600 hover:text-green-900" title="申請作成">' +
+                                                    '<i class="fas fa-plus-circle"></i>' +
+                                                '</button>' +
+                                                '<button onclick="deleteSubsidyInline(' + subsidy.id + ')" ' +
+                                                    'class="text-red-600 hover:text-red-900" title="削除">' +
+                                                    '<i class="fas fa-trash"></i>' +
+                                                '</button>' +
+                                            '</div>' +
+                                        '</td>' +
                                     '</tr>'
                                 ).join('') +
                             '</tbody>' +
-                        '</table>';
+                        '</table>' +
+                        '</div>';
                 } catch (error) {
                     console.error('Failed to load subsidy database:', error);
                     document.getElementById('subsidyDatabaseList').innerHTML = \`
@@ -1509,9 +1753,224 @@ export function getSubsidiesPage(userName: string): string {
                 });
             }
 
-            // 助成金登録ページへリダイレクト
+            // 簡単助成金登録モーダル表示
+            function showQuickAddSubsidyModal() {
+                document.getElementById('quickAddSubsidyModal').classList.remove('hidden');
+            }
+            
+            // 簡単助成金登録モーダルを閉じる
+            function closeQuickAddSubsidyModal() {
+                document.getElementById('quickAddSubsidyModal').classList.add('hidden');
+                // フォームをリセット
+                document.querySelector('#quickAddSubsidyModal form').reset();
+            }
+            
+            // 簡単助成金登録実行
+            async function createQuickSubsidy(event) {
+                event.preventDefault();
+                
+                const name = document.getElementById('quickSubsidyName').value.trim();
+                if (!name) {
+                    alert('助成金名は必須です');
+                    return;
+                }
+                
+                try {
+                    const subsidyData = {
+                        name: name,
+                        category: document.getElementById('quickSubsidyCategory').value || 'その他',
+                        managing_organization: document.getElementById('quickSubsidyOrg').value || '未設定',
+                        description: document.getElementById('quickSubsidyNotes').value || '',
+                        max_amount: parseInt(document.getElementById('quickSubsidyAmount').value) || null,
+                        subsidy_rate: null, // 簡単登録では省略
+                        requirements: '手動登録のため詳細は申請時に確認',
+                        required_documents: '申請時に確認',
+                        application_period_type: document.getElementById('quickSubsidyDeadline').value ? 'fixed' : 'anytime',
+                        application_start_date: null,
+                        application_end_date: document.getElementById('quickSubsidyDeadline').value || null,
+                        url: document.getElementById('quickSubsidyUrl').value || null
+                    };
+                    
+                    console.log('Sending subsidy data:', subsidyData);
+                    
+                    const response = await axios.post('/api/subsidies/master', subsidyData);
+                    
+                    if (response.data.success) {
+                        alert('助成金を登録しました！');
+                        closeQuickAddSubsidyModal();
+                        // 登録後にリストを更新
+                        loadSubsidyDatabase();
+                        loadSubsidies(); // セレクトボックスも更新
+                    } else {
+                        alert('登録に失敗しました: ' + (response.data.error || '不明なエラー'));
+                    }
+                } catch (error) {
+                    console.error('Quick subsidy creation error:', error);
+                    const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message;
+                    alert('助成金の登録に失敗しました: ' + errorMsg);
+                }
+            }
+
+            // 助成金登録ページへリダイレクト（詳細登録）
             function showAddSubsidyModal() {
                 window.location.href = '/subsidy-master';
+            }
+
+            // インライン助成金編集
+            async function editSubsidyInline(subsidyId) {
+                try {
+                    // まず助成金の詳細を取得
+                    const response = await axios.get('/api/subsidies/master/' + subsidyId);
+                    if (!response.data.success) {
+                        alert('助成金情報の取得に失敗しました');
+                        return;
+                    }
+                    
+                    const subsidy = response.data.subsidy;
+                    
+                    // 編集フォームを表示
+                    const editModal = document.createElement('div');
+                    editModal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                    editModal.innerHTML = \`
+                        <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">
+                                <i class="fas fa-edit text-blue-600 mr-2"></i>
+                                助成金情報を編集
+                            </h3>
+                            <form id="editSubsidyForm">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="md:col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700">助成金名 *</label>
+                                        <input type="text" id="editSubsidyName" value="\${escapeHtml(subsidy.name)}" required 
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">カテゴリ</label>
+                                        <select id="editSubsidyCategory" 
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                            <option value="">選択してください</option>
+                                            <option value="雇用系" \${subsidy.category === '雇用系' ? 'selected' : ''}>雇用系</option>
+                                            <option value="育成系" \${subsidy.category === '育成系' ? 'selected' : ''}>育成系</option>
+                                            <option value="福祉系" \${subsidy.category === '福祉系' ? 'selected' : ''}>福祉系</option>
+                                            <option value="創業系" \${subsidy.category === '創業系' ? 'selected' : ''}>創業系</option>
+                                            <option value="設備投資系" \${subsidy.category === '設備投資系' ? 'selected' : ''}>設備投資系</option>
+                                            <option value="その他" \${subsidy.category === 'その他' ? 'selected' : ''}>その他</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">管理機関</label>
+                                        <input type="text" id="editSubsidyOrg" value="\${escapeHtml(subsidy.managing_organization || '')}" 
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">最大金額（円）</label>
+                                        <input type="number" id="editSubsidyAmount" value="\${subsidy.max_amount || ''}" 
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">助成率（%）</label>
+                                        <input type="number" id="editSubsidyRate" value="\${subsidy.subsidy_rate || ''}" min="0" max="100"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">申請期限</label>
+                                        <input type="date" id="editSubsidyDeadline" value="\${subsidy.application_end_date || ''}" 
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">公式サイト</label>
+                                        <input type="url" id="editSubsidyUrl" value="\${subsidy.url || ''}" 
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    </div>
+                                    
+                                    <div class="md:col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700">説明・備考</label>
+                                        <textarea id="editSubsidyDescription" rows="3" 
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">\${escapeHtml(subsidy.description || '')}</textarea>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-6 flex justify-end space-x-3">
+                                    <button type="button" onclick="this.closest('.fixed').remove()" 
+                                        class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                                        キャンセル
+                                    </button>
+                                    <button type="submit" 
+                                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                        <i class="fas fa-save mr-2"></i>保存
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    \`;
+                    
+                    document.body.appendChild(editModal);
+                    
+                    // フォーム送信処理
+                    editModal.querySelector('#editSubsidyForm').addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        
+                        try {
+                            const updateData = {
+                                name: document.getElementById('editSubsidyName').value.trim(),
+                                category: document.getElementById('editSubsidyCategory').value,
+                                managing_organization: document.getElementById('editSubsidyOrg').value,
+                                description: document.getElementById('editSubsidyDescription').value,
+                                max_amount: parseInt(document.getElementById('editSubsidyAmount').value) || null,
+                                subsidy_rate: parseInt(document.getElementById('editSubsidyRate').value) || null,
+                                application_end_date: document.getElementById('editSubsidyDeadline').value || null,
+                                url: document.getElementById('editSubsidyUrl').value || null
+                            };
+                            
+                            const updateResponse = await axios.put('/api/subsidies/master/' + subsidyId, updateData);
+                            
+                            if (updateResponse.data.success) {
+                                alert('助成金情報を更新しました！');
+                                editModal.remove();
+                                loadSubsidyDatabase();
+                                loadSubsidies(); // セレクトボックスも更新
+                            } else {
+                                alert('更新に失敗しました: ' + (updateResponse.data.error || '不明なエラー'));
+                            }
+                        } catch (error) {
+                            console.error('Update error:', error);
+                            alert('更新に失敗しました: ' + (error.response?.data?.error || error.message));
+                        }
+                    });
+                    
+                } catch (error) {
+                    console.error('Edit modal error:', error);
+                    alert('編集フォームの表示に失敗しました');
+                }
+            }
+            
+            // インライン助成金削除
+            async function deleteSubsidyInline(subsidyId) {
+                if (!confirm('この助成金を削除しますか？関連する申請がある場合は削除できません。')) {
+                    return;
+                }
+                
+                try {
+                    const response = await axios.delete('/api/subsidies/master/' + subsidyId);
+                    
+                    if (response.data.success) {
+                        alert('助成金を削除しました');
+                        loadSubsidyDatabase();
+                        loadSubsidies(); // セレクトボックスも更新
+                    } else {
+                        alert('削除に失敗しました: ' + (response.data.error || '不明なエラー'));
+                    }
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message;
+                    alert('削除に失敗しました: ' + errorMsg);
+                }
             }
 
             // 更新履歴追加

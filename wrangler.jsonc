@@ -27,8 +27,8 @@
   // Environment variables (use wrangler secret put for production)
   "vars": {
     "ENVIRONMENT": "production",
-    "APP_URL": "https://sharoushi-task-manager.pages.dev",
-    "REDIRECT_URI": "https://sharoushi-task-manager.pages.dev/auth/callback"
+    "APP_URL": "https://a2beb7b88e3c7a9888e6ec0849498ce7.pages.dev",
+    "REDIRECT_URI": "https://a2beb7b88e3c7a9888e6ec0849498ce7.pages.dev/auth/callback"
   }
   
   // Cron Triggers設定（定期実行）
