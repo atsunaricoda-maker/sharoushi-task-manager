@@ -338,17 +338,30 @@ subsidiesRouter.put('/applications/:id', async (c) => {
     const { status, notes, checklist } = body
     
     // Update main application
-    if (status || notes !== undefined) {
-      console.log('Updating application with status:', status, 'notes:', notes)
+    console.log('Updating application with status:', status, 'notes:', notes)
+    
+    if (status) {
+      console.log('Updating status only:', status)
       const result = await c.env.DB.prepare(`
         UPDATE subsidy_applications 
-        SET status = COALESCE(?, status), 
-            notes = COALESCE(?, notes),
+        SET status = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND created_by = ?
-      `).bind(status, notes, applicationId, userId).run()
+      `).bind(status, applicationId, userId).run()
       
-      console.log('Update result:', result)
+      console.log('Status update result:', result)
+    }
+    
+    if (notes !== undefined && notes !== null) {
+      console.log('Updating notes:', notes)
+      const result = await c.env.DB.prepare(`
+        UPDATE subsidy_applications 
+        SET notes = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND created_by = ?
+      `).bind(notes, applicationId, userId).run()
+      
+      console.log('Notes update result:', result)
     }
     
     // Update checklist items
