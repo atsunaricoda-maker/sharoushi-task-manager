@@ -25,9 +25,11 @@ async function checkScheduleAuth(c: any) {
     }
 
     // Set user info for use in route handlers (sub contains the user id)
-    c.set('userId', payload.sub)
+    // Convert sub to integer if it's a string (common in OAuth tokens)
+    const userId = typeof payload.sub === 'string' ? parseInt(payload.sub, 10) : payload.sub
+    c.set('userId', userId)
     c.set('user', payload)
-    console.log('Auth successful, userId set to:', payload.sub)
+    console.log('Auth successful, userId set to:', userId, 'from payload.sub:', payload.sub)
     return null // No error
   } catch (error) {
     console.error('Auth error:', error)
@@ -143,14 +145,48 @@ scheduleRouter.post('/', async (c) => {
       }, 400)
     }
     
+    // Verify user exists in database and get actual user ID
+    let actualUserId = userId
+    try {
+      // Try to find user by email if userId lookup fails
+      const userEmail = user?.email || payload?.email
+      if (userEmail) {
+        const dbUser = await c.env.DB.prepare(`
+          SELECT id FROM users WHERE email = ?
+        `).bind(userEmail).first()
+        
+        if (dbUser) {
+          actualUserId = dbUser.id
+          console.log('Found user in database:', dbUser.id, 'for email:', userEmail)
+        } else {
+          console.log('User not found in database for email:', userEmail, 'using token userId:', userId)
+        }
+      }
+    } catch (userLookupError) {
+      console.warn('User lookup failed, using token userId:', userLookupError)
+    }
+    
     // Try to create schedule entry, but handle table not existing
     try {
+      console.log('Inserting schedule entry with params:', {
+        user_id: actualUserId,
+        client_id: client_id || null,
+        title,
+        description: description || null,
+        entry_type: entry_type || 'other',
+        start_time,
+        end_time: end_time || null,
+        location: location || null,
+        is_recurring: is_recurring ? 1 : 0,
+        recurrence_pattern: recurrence_pattern ? JSON.stringify(recurrence_pattern) : null
+      })
+      
       const result = await c.env.DB.prepare(`
         INSERT INTO schedule_entries 
         (user_id, client_id, title, description, entry_type, start_time, end_time, location, is_recurring, recurrence_pattern, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).bind(
-        userId, 
+        actualUserId, 
         client_id || null, 
         title, 
         description || null, 
