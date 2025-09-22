@@ -330,14 +330,27 @@ export function getSchedulePage(userName: string, userRole: string): string {
             }, duration);
         }
 
+        // Add axios interceptor for authentication errors
+        axios.interceptors.response.use(
+            response => response,
+            error => {
+                if (error.response && error.response.status === 401) {
+                    console.log('Authentication required, redirecting to login');
+                    window.location.href = '/login';
+                    return Promise.reject(error);
+                }
+                return Promise.reject(error);
+            }
+        );
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
-            // Ensure authentication in dev environment
+            // Try development auth first (only works in dev environment)
             try {
                 await axios.get('/api/health?dev-auth=true');
                 console.log('Development authentication completed');
             } catch (error) {
-                console.warn('Dev auth failed, proceeding anyway:', error);
+                console.warn('Dev auth not available (production environment)');
             }
             
             loadClients();

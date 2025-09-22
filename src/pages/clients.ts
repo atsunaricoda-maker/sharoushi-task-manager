@@ -714,6 +714,19 @@ export function getClientsPage(userName: string): string {
             }
         }
         
+        // Add axios interceptor for authentication errors
+        axios.interceptors.response.use(
+            response => response,
+            error => {
+                if (error.response && error.response.status === 401) {
+                    console.log('Authentication required, redirecting to login');
+                    window.location.href = '/login';
+                    return Promise.reject(error);
+                }
+                return Promise.reject(error);
+            }
+        );
+
         // Load clients on page load
         document.addEventListener('DOMContentLoaded', loadClients);
     </script>

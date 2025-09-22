@@ -230,7 +230,7 @@ app.route('/api/schedule', scheduleRouter)
 
 // Apply auth middleware to protected routes
 app.use('/api/tasks/*', checkAuth)
-// app.use('/api/clients/*', checkAuth)  // Temporarily disabled for testing
+app.use('/api/clients/*', checkAuth)
 app.use('/api/users/*', checkAuth)
 app.use('/api/dashboard/*', checkAuth)
 app.use('/api/ai/*', checkAuth)
@@ -1499,11 +1499,14 @@ app.get('/tasks', async (c) => {
 
 // Clients page
 app.get('/clients', async (c) => {
-  // テスト用認証バイパス
-  const testUser = { name: '田中 太郎', role: 'admin' }
-  return c.html(getClientsPage(testUser.name))
+  // Development environment bypass (only for local testing)
+  const environment = c.env.ENVIRONMENT || 'production'
+  if (environment === 'development') {
+    const testUser = { name: '田中 太郎', role: 'admin' }
+    return c.html(getClientsPage(testUser.name))
+  }
   
-  /* 元の認証コード - テスト用にコメントアウト
+  // Production authentication
   const token = getCookie(c, 'auth-token')
   
   if (!token) {
@@ -1518,7 +1521,6 @@ app.get('/clients', async (c) => {
   }
   
   return c.html(getClientsPage(payload.name))
-  */
 })
 
 // Reports page
@@ -1659,32 +1661,28 @@ app.get('/test-schedule', async (c) => {
 
 // Schedule page
 app.get('/schedule', async (c) => {
-  // Temporarily bypass auth for testing
-  const testUser = { name: '田中 太郎', role: 'admin' }
-  return c.html(getSchedulePage(testUser.name, testUser.role))
+  // Development environment bypass (only for local testing)
+  const environment = c.env.ENVIRONMENT || 'production'
+  if (environment === 'development') {
+    const testUser = { name: '田中 太郎', role: 'admin' }
+    return c.html(getSchedulePage(testUser.name, testUser.role))
+  }
   
-  /* Original auth code - commented out for testing
+  // Production authentication
   const token = getCookie(c, 'auth-token')
   
-  console.log('Schedule page access - Token found:', !!token)
-  
   if (!token) {
-    console.log('No token found, redirecting to login')
     return c.redirect('/login')
   }
   
   const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
   const payload = await verifyToken(token, jwtSecret)
   
-  console.log('Token verification result:', !!payload, payload?.name)
-  
   if (!payload) {
-    console.log('Token verification failed, redirecting to login')
     return c.redirect('/login')
   }
   
   return c.html(getSchedulePage(payload.name, payload.role || 'user'))
-  */
 })
 
 // Admin Dashboard page

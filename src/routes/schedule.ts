@@ -33,12 +33,9 @@ async function checkScheduleAuth(c: any) {
 
 // Get schedule entries for a date range
 scheduleRouter.get('/', async (c) => {
-  // Temporarily bypass auth for testing
-  c.set('userId', 1) // Test user ID
-  /* Original auth check - commented for testing
+  // Check authentication
   const authError = await checkScheduleAuth(c)
   if (authError) return authError
-  */
   
   try {
     const startDate = c.req.query('start_date') || new Date().toISOString().split('T')[0]
@@ -111,12 +108,9 @@ scheduleRouter.get('/:id', async (c) => {
 
 // Create schedule entry
 scheduleRouter.post('/', async (c) => {
-  // Temporarily bypass auth for testing
-  c.set('userId', 1) // Test user ID
-  /* Original auth check - commented for testing
+  // Check authentication
   const authError = await checkScheduleAuth(c)
   if (authError) return authError
-  */
   
   try {
     const body = await c.req.json()
