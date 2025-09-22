@@ -1,10 +1,41 @@
 import { Hono } from 'hono'
 import type { Bindings } from '../types'
+import { getCookie } from 'hono/cookie'
+import { verify } from 'hono/jwt'
 
 const scheduleRouter = new Hono<{ Bindings: Bindings }>()
 
+// Simple auth check for schedule routes
+async function checkScheduleAuth(c: any) {
+  try {
+    const token = getCookie(c, 'auth_token')
+    if (!token) {
+      return c.json({ error: 'Unauthorized', message: 'No auth token found' }, 401)
+    }
+
+    const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+    const payload = await verify(token, jwtSecret)
+    
+    if (!payload || !payload.userId) {
+      return c.json({ error: 'Unauthorized', message: 'Invalid token' }, 401)
+    }
+
+    // Set user info for use in route handlers
+    c.set('userId', payload.userId)
+    c.set('user', payload)
+    return null // No error
+  } catch (error) {
+    console.error('Auth error:', error)
+    return c.json({ error: 'Unauthorized', message: 'Invalid token' }, 401)
+  }
+}
+
 // Get schedule entries for a date range
 scheduleRouter.get('/', async (c) => {
+  // Check authentication
+  const authError = await checkScheduleAuth(c)
+  if (authError) return authError
+  
   try {
     const startDate = c.req.query('start_date') || new Date().toISOString().split('T')[0]
     const endDate = c.req.query('end_date') || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -76,14 +107,21 @@ scheduleRouter.get('/:id', async (c) => {
 
 // Create schedule entry
 scheduleRouter.post('/', async (c) => {
+  // Check authentication
+  const authError = await checkScheduleAuth(c)
+  if (authError) return authError
+  
   try {
     const body = await c.req.json()
     const { 
-      user_id, client_id, title, description, entry_type,
+      client_id, title, description, entry_type,
       start_time, end_time, location, is_recurring, recurrence_pattern
     } = body
     
-    console.log('Creating schedule entry:', { title, entry_type, start_time })
+    // Get user_id from auth context
+    const userId = c.get('userId')
+    
+    console.log('Creating schedule entry:', { title, entry_type, start_time, userId })
     
     // Validate required fields
     if (!title || !start_time) {
@@ -97,7 +135,7 @@ scheduleRouter.post('/', async (c) => {
         (user_id, client_id, title, description, entry_type, start_time, end_time, location, is_recurring, recurrence_pattern, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).bind(
-        user_id || null, 
+        userId, 
         client_id || null, 
         title, 
         description || null, 

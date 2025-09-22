@@ -331,7 +331,15 @@ export function getSchedulePage(userName: string, userRole: string): string {
         }
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Ensure authentication in dev environment
+            try {
+                await axios.get('/api/health?dev-auth=true');
+                console.log('Development authentication completed');
+            } catch (error) {
+                console.warn('Dev auth failed, proceeding anyway:', error);
+            }
+            
             loadClients();
             loadScheduleEvents();
             renderCalendar();
@@ -512,11 +520,7 @@ export function getSchedulePage(userName: string, userRole: string): string {
             const formData = new FormData(e.target);
             const eventData = Object.fromEntries(formData);
             
-            // Add user_id if not present (for now, use a default value)
-            if (!eventData.user_id) {
-                eventData.user_id = 1; // Default user ID
-            }
-            
+            // user_id will be automatically set by the server from auth context
             console.log('Submitting event data:', eventData);
             
             try {

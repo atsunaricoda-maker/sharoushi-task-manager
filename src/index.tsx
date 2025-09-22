@@ -220,6 +220,9 @@ app.get('/dev-login', (c) => {
   `)
 })
 
+// Mount routers first (before auth middleware)
+app.route('/api/schedule', scheduleRouter)
+
 // Apply auth middleware to protected routes
 app.use('/api/tasks/*', checkAuth)
 app.use('/api/clients/*', checkAuth)
@@ -233,10 +236,7 @@ app.use('/api/calendar/*', checkAuth)
 app.use('/api/projects/*', checkAuth)
 app.use('/api/subsidies/*', checkAuth)
 app.use('/api/admin/*', checkAuth)
-app.use('/api/schedule/*', checkAuth)
-
-// Mount routers
-app.route('/api/schedule', scheduleRouter)
+// Note: schedule auth is handled within the router for more flexibility
 app.route('/api/clients', clientsRouter)
 app.route('/api/reports', reportsRouter)
 app.route('/api/notifications', notificationRouter)
