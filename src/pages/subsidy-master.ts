@@ -374,52 +374,52 @@ export const subsidyMasterPage = html`
         return;
       }
 
-      grid.innerHTML = subsidies.map(subsidy => `
-        <div class="col-md-6 col-lg-4">
-          <div class="card subsidy-card h-100">
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-start mb-2">
-                <span class="badge category-badge" style="background-color: ${getCategoryColor(subsidy.category)}">${subsidy.category}</span>
-                <span class="badge status-badge ${subsidy.is_active ? 'bg-success' : 'bg-secondary'}">
-                  ${subsidy.is_active ? '有効' : '無効'}
-                </span>
-              </div>
+      grid.innerHTML = subsidies.map(subsidy => 
+        '<div class="col-md-6 col-lg-4">' +
+          '<div class="card subsidy-card h-100">' +
+            '<div class="card-body">' +
+              '<div class="d-flex justify-content-between align-items-start mb-2">' +
+                '<span class="badge category-badge" style="background-color: ' + getCategoryColor(subsidy.category) + '">' + subsidy.category + '</span>' +
+                '<span class="badge status-badge ' + (subsidy.is_active ? 'bg-success' : 'bg-secondary') + '">' +
+                  (subsidy.is_active ? '有効' : '無効') +
+                '</span>' +
+              '</div>' +
               
-              <h6 class="card-title">${subsidy.name}</h6>
-              <p class="card-text text-muted small">${subsidy.managing_organization}</p>
+              '<h6 class="card-title">' + subsidy.name + '</h6>' +
+              '<p class="card-text text-muted small">' + subsidy.managing_organization + '</p>' +
               
-              ${subsidy.description ? `<p class="card-text small">${subsidy.description.substring(0, 100)}${subsidy.description.length > 100 ? '...' : ''}</p>` : ''}
+              (subsidy.description ? '<p class="card-text small">' + subsidy.description.substring(0, 100) + (subsidy.description.length > 100 ? '...' : '') + '</p>' : '') +
               
-              <div class="row text-center mt-3">
-                <div class="col-6">
-                  <small class="text-muted">申請数</small>
-                  <div><strong>${subsidy.application_count || 0}</strong></div>
-                </div>
-                <div class="col-6">
-                  <small class="text-muted">成功数</small>
-                  <div><strong>${subsidy.success_count || 0}</strong></div>
-                </div>
-              </div>
+              '<div class="row text-center mt-3">' +
+                '<div class="col-6">' +
+                  '<small class="text-muted">申請数</small>' +
+                  '<div><strong>' + (subsidy.application_count || 0) + '</strong></div>' +
+                '</div>' +
+                '<div class="col-6">' +
+                  '<small class="text-muted">成功数</small>' +
+                  '<div><strong>' + (subsidy.success_count || 0) + '</strong></div>' +
+                '</div>' +
+              '</div>' +
               
-              ${subsidy.max_amount ? `<div class="mt-2"><small class="text-success">最大 ${formatAmount(subsidy.max_amount)}円</small></div>` : ''}
-            </div>
+              (subsidy.max_amount ? '<div class="mt-2"><small class="text-success">最大 ' + formatAmount(subsidy.max_amount) + '円</small></div>' : '') +
+            '</div>' +
             
-            <div class="card-footer bg-transparent">
-              <div class="btn-group w-100">
-                <button class="btn btn-outline-primary btn-sm" onclick="viewSubsidyDetail(${subsidy.id})">
-                  <i class="bi bi-eye me-1"></i>詳細
-                </button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="editSubsidy(${subsidy.id})">
-                  <i class="bi bi-pencil me-1"></i>編集
-                </button>
-                <button class="btn btn-outline-danger btn-sm" onclick="deleteSubsidy(${subsidy.id}, '${subsidy.name}', ${subsidy.application_count})">
-                  <i class="bi bi-trash me-1"></i>削除
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      `).join('');
+            '<div class="card-footer bg-transparent">' +
+              '<div class="btn-group w-100">' +
+                '<button class="btn btn-outline-primary btn-sm" onclick="viewSubsidyDetail(' + subsidy.id + ')">' +
+                  '<i class="bi bi-eye me-1"></i>詳細' +
+                '</button>' +
+                '<button class="btn btn-outline-secondary btn-sm" onclick="editSubsidy(' + subsidy.id + ')">' +
+                  '<i class="bi bi-pencil me-1"></i>編集' +
+                '</button>' +
+                '<button class="btn btn-outline-danger btn-sm" onclick="deleteSubsidy(' + subsidy.id + ', \'' + subsidy.name.replace(/'/g, "\\'") + '\', ' + subsidy.application_count + ')">' +
+                  '<i class="bi bi-trash me-1"></i>削除' +
+                '</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      ).join('');
     }
 
     function updateStats(data) {
@@ -447,21 +447,21 @@ export const subsidyMasterPage = html`
       let html = '';
       
       // Previous button
-      html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-        <a class="page-link" href="#" onclick="loadSubsidies(${currentPage - 1})">前へ</a>
-      </li>`;
+      html += '<li class="page-item ' + (currentPage === 1 ? 'disabled' : '') + '">' +
+        '<a class="page-link" href="#" onclick="loadSubsidies(' + (currentPage - 1) + ')">前へ</a>' +
+      '</li>';
       
       // Page numbers
       for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
-        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
-          <a class="page-link" href="#" onclick="loadSubsidies(${i})">${i}</a>
-        </li>`;
+        html += '<li class="page-item ' + (i === currentPage ? 'active' : '') + '">' +
+          '<a class="page-link" href="#" onclick="loadSubsidies(' + i + ')">' + i + '</a>' +
+        '</li>';
       }
       
       // Next button
-      html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-        <a class="page-link" href="#" onclick="loadSubsidies(${currentPage + 1})">次へ</a>
-      </li>`;
+      html += '<li class="page-item ' + (currentPage === totalPages ? 'disabled' : '') + '">' +
+        '<a class="page-link" href="#" onclick="loadSubsidies(' + (currentPage + 1) + ')">次へ</a>' +
+      '</li>';
       
       pagination.innerHTML = html;
     }
@@ -488,7 +488,7 @@ export const subsidyMasterPage = html`
 
     async function editSubsidy(subsidyId) {
       try {
-        const response = await axios.get(\`/api/subsidies/master/\${subsidyId}\`);
+        const response = await axios.get('/api/subsidies/master/' + subsidyId);
         
         if (response.data.success) {
           const subsidy = response.data.subsidy;
@@ -548,7 +548,7 @@ export const subsidyMasterPage = html`
 
         let response;
         if (subsidyId) {
-          response = await axios.put(\`/api/subsidies/master/\${subsidyId}\`, data);
+          response = await axios.put('/api/subsidies/master/' + subsidyId, data);
         } else {
           response = await axios.post('/api/subsidies/master', data);
         }
@@ -570,16 +570,16 @@ export const subsidyMasterPage = html`
 
     async function deleteSubsidy(subsidyId, subsidyName, applicationCount) {
       if (applicationCount > 0) {
-        alert(\`この助成金「\${subsidyName}」には\${applicationCount}件の申請があるため削除できません。無効化してください。\`);
+        alert('この助成金「' + subsidyName + '」には' + applicationCount + '件の申請があるため削除できません。無効化してください。');
         return;
       }
       
-      if (!confirm(\`助成金「\${subsidyName}」を削除しますか？この操作は取り消せません。\`)) {
+      if (!confirm('助成金「' + subsidyName + '」を削除しますか？この操作は取り消せません。')) {
         return;
       }
 
       try {
-        const response = await axios.delete(\`/api/subsidies/master/\${subsidyId}\`);
+        const response = await axios.delete('/api/subsidies/master/' + subsidyId);
         
         if (response.data.success) {
           alert(response.data.message);
@@ -596,93 +596,88 @@ export const subsidyMasterPage = html`
 
     async function viewSubsidyDetail(subsidyId) {
       try {
-        const response = await axios.get(\`/api/subsidies/master/\${subsidyId}\`);
+        const response = await axios.get('/api/subsidies/master/' + subsidyId);
         
         if (response.data.success) {
           const subsidy = response.data.subsidy;
           
           document.getElementById('subsidyDetailTitle').textContent = subsidy.name;
-          document.getElementById('subsidyDetailContent').innerHTML = \`
-            <div class="row">
-              <div class="col-md-8">
-                <h6>基本情報</h6>
-                <table class="table">
-                  <tr><th>助成金名</th><td>\${subsidy.name}</td></tr>
-                  <tr><th>カテゴリ</th><td><span class="badge" style="background-color: \${getCategoryColor(subsidy.category)}">\${subsidy.category}</span></td></tr>
-                  <tr><th>管理団体</th><td>\${subsidy.managing_organization}</td></tr>
-                  <tr><th>説明</th><td>\${subsidy.description || '-'}</td></tr>
-                  <tr><th>最大支給額</th><td>\${subsidy.max_amount ? formatAmount(subsidy.max_amount) + '円' : '-'}</td></tr>
-                  <tr><th>助成率</th><td>\${subsidy.subsidy_rate ? subsidy.subsidy_rate + '%' : '-'}</td></tr>
-                  <tr><th>申請時期</th><td>\${getApplicationPeriodText(subsidy)}</td></tr>
-                  <tr><th>参考URL</th><td>\${subsidy.url ? \`<a href="\${subsidy.url}" target="_blank">\${subsidy.url}</a>\` : '-'}</td></tr>
-                  <tr><th>ステータス</th><td><span class="badge \${subsidy.is_active ? 'bg-success' : 'bg-secondary'}">\${subsidy.is_active ? '有効' : '無効'}</span></td></tr>
-                </table>
+          document.getElementById('subsidyDetailContent').innerHTML = 
+            '<div class="row">' +
+              '<div class="col-md-8">' +
+                '<h6>基本情報</h6>' +
+                '<table class="table">' +
+                  '<tr><th>助成金名</th><td>' + subsidy.name + '</td></tr>' +
+                  '<tr><th>カテゴリ</th><td><span class="badge" style="background-color: ' + getCategoryColor(subsidy.category) + '">' + subsidy.category + '</span></td></tr>' +
+                  '<tr><th>管理団体</th><td>' + subsidy.managing_organization + '</td></tr>' +
+                  '<tr><th>説明</th><td>' + (subsidy.description || '-') + '</td></tr>' +
+                  '<tr><th>最大支給額</th><td>' + (subsidy.max_amount ? formatAmount(subsidy.max_amount) + '円' : '-') + '</td></tr>' +
+                  '<tr><th>助成率</th><td>' + (subsidy.subsidy_rate ? subsidy.subsidy_rate + '%' : '-') + '</td></tr>' +
+                  '<tr><th>申請時期</th><td>' + getApplicationPeriodText(subsidy) + '</td></tr>' +
+                  '<tr><th>参考URL</th><td>' + (subsidy.url ? '<a href="' + subsidy.url + '" target="_blank">' + subsidy.url + '</a>' : '-') + '</td></tr>' +
+                  '<tr><th>ステータス</th><td><span class="badge ' + (subsidy.is_active ? 'bg-success' : 'bg-secondary') + '">' + (subsidy.is_active ? '有効' : '無効') + '</span></td></tr>' +
+                '</table>' +
                 
-                \${subsidy.requirements ? \`
-                <h6>申請要件</h6>
-                <div class="card">
-                  <div class="card-body">
-                    <pre style="white-space: pre-wrap;">\${subsidy.requirements}</pre>
-                  </div>
-                </div>
-                \` : ''}
+                (subsidy.requirements ? 
+                '<h6>申請要件</h6>' +
+                '<div class="card">' +
+                  '<div class="card-body">' +
+                    '<pre style="white-space: pre-wrap;">' + subsidy.requirements + '</pre>' +
+                  '</div>' +
+                '</div>' : '') +
                 
-                \${subsidy.required_documents ? \`
-                <h6 class="mt-3">必要書類</h6>
-                <div class="card">
-                  <div class="card-body">
-                    <pre style="white-space: pre-wrap;">\${subsidy.required_documents}</pre>
-                  </div>
-                </div>
-                \` : ''}
-              </div>
+                (subsidy.required_documents ? 
+                '<h6 class="mt-3">必要書類</h6>' +
+                '<div class="card">' +
+                  '<div class="card-body">' +
+                    '<pre style="white-space: pre-wrap;">' + subsidy.required_documents + '</pre>' +
+                  '</div>' +
+                '</div>' : '') +
+              '</div>' +
               
-              <div class="col-md-4">
-                <h6>統計情報</h6>
-                <div class="card">
-                  <div class="card-body">
-                    <div class="row text-center">
-                      <div class="col-6">
-                        <h4 class="text-primary">\${subsidy.application_count || 0}</h4>
-                        <small>申請数</small>
-                      </div>
-                      <div class="col-6">
-                        <h4 class="text-success">\${subsidy.success_count || 0}</h4>
-                        <small>成功数</small>
-                      </div>
-                    </div>
-                    <hr>
-                    <div class="text-center">
-                      <h4 class="text-warning">\${subsidy.application_count > 0 ? Math.round((subsidy.success_count / subsidy.application_count) * 100) : 0}%</h4>
-                      <small>成功率</small>
-                    </div>
-                    \${subsidy.avg_received_amount ? \`
-                    <hr>
-                    <div class="text-center">
-                      <h6 class="text-info">\${formatAmount(Math.round(subsidy.avg_received_amount))}円</h6>
-                      <small>平均受給額</small>
-                    </div>
-                    \` : ''}
-                  </div>
-                </div>
+              '<div class="col-md-4">' +
+                '<h6>統計情報</h6>' +
+                '<div class="card">' +
+                  '<div class="card-body">' +
+                    '<div class="row text-center">' +
+                      '<div class="col-6">' +
+                        '<h4 class="text-primary">' + (subsidy.application_count || 0) + '</h4>' +
+                        '<small>申請数</small>' +
+                      '</div>' +
+                      '<div class="col-6">' +
+                        '<h4 class="text-success">' + (subsidy.success_count || 0) + '</h4>' +
+                        '<small>成功数</small>' +
+                      '</div>' +
+                    '</div>' +
+                    '<hr>' +
+                    '<div class="text-center">' +
+                      '<h4 class="text-warning">' + (subsidy.application_count > 0 ? Math.round((subsidy.success_count / subsidy.application_count) * 100) : 0) + '%</h4>' +
+                      '<small>成功率</small>' +
+                    '</div>' +
+                    (subsidy.avg_received_amount ? 
+                    '<hr>' +
+                    '<div class="text-center">' +
+                      '<h6 class="text-info">' + formatAmount(Math.round(subsidy.avg_received_amount)) + '円</h6>' +
+                      '<small>平均受給額</small>' +
+                    '</div>' : '') +
+                  '</div>' +
+                '</div>' +
                 
-                \${subsidy.recent_applications && subsidy.recent_applications.length > 0 ? \`
-                <h6 class="mt-3">最近の申請</h6>
-                <div class="list-group">
-                  \${subsidy.recent_applications.slice(0, 5).map(app => \`
-                    <div class="list-group-item">
-                      <div class="d-flex justify-content-between">
-                        <small><strong>\${app.client_name}</strong></small>
-                        <small class="text-muted">\${formatDate(app.created_at)}</small>
-                      </div>
-                      <small class="badge bg-secondary">\${getStatusText(app.status)}</small>
-                    </div>
-                  \`).join('')}
-                </div>
-                \` : ''}
-              </div>
-            </div>
-          \`;
+                (subsidy.recent_applications && subsidy.recent_applications.length > 0 ? 
+                '<h6 class="mt-3">最近の申請</h6>' +
+                '<div class="list-group">' +
+                  subsidy.recent_applications.slice(0, 5).map(app => 
+                    '<div class="list-group-item">' +
+                      '<div class="d-flex justify-content-between">' +
+                        '<small><strong>' + app.client_name + '</strong></small>' +
+                        '<small class="text-muted">' + formatDate(app.created_at) + '</small>' +
+                      '</div>' +
+                      '<small class="badge bg-secondary">' + getStatusText(app.status) + '</small>' +
+                    '</div>'
+                  ).join('') +
+                '</div>' : '') +
+              '</div>' +
+            '</div>';
           
           const modal = new bootstrap.Modal(document.getElementById('subsidyDetailModal'));
           modal.show();
@@ -725,7 +720,7 @@ export const subsidyMasterPage = html`
       let text = typeText[subsidy.application_period_type] || '随時';
       
       if (subsidy.application_start_date && subsidy.application_end_date) {
-        text += \` (\${formatDate(subsidy.application_start_date)} ～ \${formatDate(subsidy.application_end_date)})\`;
+        text += ' (' + formatDate(subsidy.application_start_date) + ' ～ ' + formatDate(subsidy.application_end_date) + ')';
       }
       
       return text;

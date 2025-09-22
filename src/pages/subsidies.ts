@@ -562,20 +562,20 @@ export function getSubsidiesPage(userName: string): string {
                     'cancelled': 'dark'
                 };
 
-                container.innerHTML = recentActivity.map(activity => `
-                    <div class="d-flex align-items-center mb-3 pb-2 border-bottom">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-1">${activity.subsidy_name}</h6>
-                            <small class="text-muted">
-                                <i class="fas fa-building me-1"></i>${activity.client_name}
-                                <span class="ms-2">
-                                    <i class="fas fa-clock me-1"></i>${formatRelativeTime(activity.updated_at)}
-                                </span>
-                            </small>
-                        </div>
-                        <span class="badge bg-${statusBadges[activity.status]}">${statusLabels[activity.status]}</span>
-                    </div>
-                `).join('');
+                container.innerHTML = recentActivity.map(activity => 
+                    '<div class="d-flex align-items-center mb-3 pb-2 border-bottom">' +
+                        '<div class="flex-grow-1">' +
+                            '<h6 class="mb-1">' + activity.subsidy_name + '</h6>' +
+                            '<small class="text-muted">' +
+                                '<i class="fas fa-building me-1"></i>' + activity.client_name +
+                                '<span class="ms-2">' +
+                                    '<i class="fas fa-clock me-1"></i>' + formatRelativeTime(activity.updated_at) +
+                                '</span>' +
+                            '</small>' +
+                        '</div>' +
+                        '<span class="badge bg-' + statusBadges[activity.status] + '">' + statusLabels[activity.status] + '</span>' +
+                    '</div>'
+                ).join('');
             }
 
             // 締切間近の更新
@@ -592,21 +592,20 @@ export function getSubsidiesPage(userName: string): string {
                     const daysLeft = deadline.days_until_deadline;
                     const urgencyClass = daysLeft <= 7 ? 'danger' : daysLeft <= 14 ? 'warning' : 'info';
                     
-                    return `
-                        <div class="d-flex align-items-center mb-3 pb-2 border-bottom">
-                            <div class="flex-grow-1">
-                                <h6 class="mb-1">${deadline.subsidy_name}</h6>
-                                <small class="text-muted">
-                                    <i class="fas fa-building me-1"></i>${deadline.client_name}
-                                </small>
-                                <div class="mt-1">
-                                    <small class="text-${urgencyClass}">
-                                        <i class="fas fa-calendar-times me-1"></i>${daysLeft}日後
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    return 
+                        '<div class="d-flex align-items-center mb-3 pb-2 border-bottom">' +
+                            '<div class="flex-grow-1">' +
+                                '<h6 class="mb-1">' + deadline.subsidy_name + '</h6>' +
+                                '<small class="text-muted">' +
+                                    '<i class="fas fa-building me-1"></i>' + deadline.client_name +
+                                '</small>' +
+                                '<div class="mt-1">' +
+                                    '<small class="text-' + urgencyClass + '">' +
+                                        '<i class="fas fa-calendar-times me-1"></i>' + daysLeft + '日後' +
+                                    '</small>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>';
                 }).join('');
             }
 
@@ -617,10 +616,10 @@ export function getSubsidiesPage(userName: string): string {
                 const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
                 
                 if (diffInHours < 1) return '1時間以内';
-                if (diffInHours < 24) return `${diffInHours}時間前`;
+                if (diffInHours < 24) return diffInHours + '時間前';
                 
                 const diffInDays = Math.floor(diffInHours / 24);
-                if (diffInDays < 7) return `${diffInDays}日前`;
+                if (diffInDays < 7) return diffInDays + '日前';
                 
                 return date.toLocaleDateString('ja-JP');
             }
@@ -669,16 +668,15 @@ export function getSubsidiesPage(userName: string): string {
                     // エラー詳細を画面に表示
                     const container = document.getElementById('applicationsList');
                     const errorMsg = error.response?.data?.debug || error.response?.data?.message || error.message;
-                    container.innerHTML = \`
-                        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-                            <div class="text-red-800 font-medium">申請データの読み込みエラー</div>
-                            <div class="text-red-600 text-sm mt-2">
-                                エラー: \${errorMsg}<br>
-                                ステータス: \${error.response?.status || 'unknown'}<br>
-                                URL: /api/subsidies/applications
-                            </div>
-                        </div>
-                    \`;
+                    container.innerHTML = 
+                        '<div class="bg-red-50 border border-red-200 rounded-lg p-4">' +
+                            '<div class="text-red-800 font-medium">申請データの読み込みエラー</div>' +
+                            '<div class="text-red-600 text-sm mt-2">' +
+                                'エラー: ' + errorMsg + '<br>' +
+                                'ステータス: ' + (error.response?.status || 'unknown') + '<br>' +
+                                'URL: /api/subsidies/applications' +
+                            '</div>' +
+                        '</div>';
                     
                     // 統計を0で更新
                     updateStatistics([]);
@@ -723,58 +721,56 @@ export function getSubsidiesPage(userName: string): string {
                         ? Math.ceil((new Date(app.submission_deadline) - new Date()) / (1000 * 60 * 60 * 24))
                         : null;
                     
-                    return \`
-                        <div class="bg-white rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer" 
-                             onclick="showApplicationDetail(\${app.id})">
-                            <div class="p-6">
-                                <div class="flex justify-between items-start mb-4">
-                                    <div>
-                                        <h3 class="text-lg font-medium text-gray-900">\${escapeHtml(app.subsidy_name)}</h3>
-                                        <p class="text-sm text-gray-600 mt-1">
-                                            <i class="fas fa-building mr-1"></i>\${escapeHtml(app.client_name)}
-                                        </p>
-                                    </div>
-                                    <span class="px-3 py-1 text-xs rounded-full \${statusColors[app.status]}">
-                                        \${statusLabels[app.status]}
-                                    </span>
-                                </div>
+                    return 
+                        '<div class="bg-white rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer" ' +
+                             'onclick="showApplicationDetail(' + app.id + ')">' +
+                            '<div class="p-6">' +
+                                '<div class="flex justify-between items-start mb-4">' +
+                                    '<div>' +
+                                        '<h3 class="text-lg font-medium text-gray-900">' + escapeHtml(app.subsidy_name) + '</h3>' +
+                                        '<p class="text-sm text-gray-600 mt-1">' +
+                                            '<i class="fas fa-building mr-1"></i>' + escapeHtml(app.client_name) +
+                                        '</p>' +
+                                    '</div>' +
+                                    '<span class="px-3 py-1 text-xs rounded-full ' + statusColors[app.status] + '">' +
+                                        statusLabels[app.status] +
+                                    '</span>' +
+                                '</div>' +
                                 
-                                <div class="grid grid-cols-3 gap-4 mb-4 text-sm">
-                                    <div>
-                                        <div class="text-gray-600">申請金額</div>
-                                        <div class="font-medium">¥\${(app.amount_requested || 0).toLocaleString()}</div>
-                                    </div>
-                                    <div>
-                                        <div class="text-gray-600">最大支給額</div>
-                                        <div class="font-medium">¥\${(app.subsidy_max_amount || 0).toLocaleString()}</div>
-                                    </div>
-                                    <div>
-                                        <div class="text-gray-600">提出期限</div>
-                                        <div class="font-medium \${daysUntilDeadline && daysUntilDeadline <= 7 ? 'text-red-600' : ''}">
-                                            \${app.submission_deadline ? formatDate(app.submission_deadline) : '-'}
-                                            \${daysUntilDeadline !== null && daysUntilDeadline >= 0 ? \` (\${daysUntilDeadline}日)\` : ''}
-                                        </div>
-                                    </div>
-                                </div>
+                                '<div class="grid grid-cols-3 gap-4 mb-4 text-sm">' +
+                                    '<div>' +
+                                        '<div class="text-gray-600">申請金額</div>' +
+                                        '<div class="font-medium">¥' + (app.amount_requested || 0).toLocaleString() + '</div>' +
+                                    '</div>' +
+                                    '<div>' +
+                                        '<div class="text-gray-600">最大支給額</div>' +
+                                        '<div class="font-medium">¥' + (app.subsidy_max_amount || 0).toLocaleString() + '</div>' +
+                                    '</div>' +
+                                    '<div>' +
+                                        '<div class="text-gray-600">提出期限</div>' +
+                                        '<div class="font-medium ' + (daysUntilDeadline && daysUntilDeadline <= 7 ? 'text-red-600' : '') + '">' +
+                                            (app.submission_deadline ? formatDate(app.submission_deadline) : '-') +
+                                            (daysUntilDeadline !== null && daysUntilDeadline >= 0 ? ' (' + daysUntilDeadline + '日)' : '') +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>' +
                                 
-                                <div class="mb-2">
-                                    <div class="flex justify-between text-sm text-gray-600 mb-1">
-                                        <span>進捗</span>
-                                        <span>\${app.total_items > 0 ? Math.round((app.completed_items / app.total_items) * 100) : 0}%</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" style="width: \${app.total_items > 0 ? Math.round((app.completed_items / app.total_items) * 100) : 0}%"></div>
-                                    </div>
-                                </div>
+                                '<div class="mb-2">' +
+                                    '<div class="flex justify-between text-sm text-gray-600 mb-1">' +
+                                        '<span>進捗</span>' +
+                                        '<span>' + (app.total_items > 0 ? Math.round((app.completed_items / app.total_items) * 100) : 0) + '%</span>' +
+                                    '</div>' +
+                                    '<div class="progress-bar">' +
+                                        '<div class="progress-fill" style="width: ' + (app.total_items > 0 ? Math.round((app.completed_items / app.total_items) * 100) : 0) + '%"></div>' +
+                                    '</div>' +
+                                '</div>' +
                                 
-                                \${app.application_number ? \`
-                                    <div class="mt-3 text-sm text-gray-600">
-                                        <i class="fas fa-hashtag mr-1"></i>申請番号: \${escapeHtml(app.application_number)}
-                                    </div>
-                                \` : ''}
-                            </div>
-                        </div>
-                    \`;
+                                (app.application_number ? 
+                                    '<div class="mt-3 text-sm text-gray-600">' +
+                                        '<i class="fas fa-hashtag mr-1"></i>申請番号: ' + escapeHtml(app.application_number) +
+                                    '</div>' : '') +
+                            '</div>' +
+                        '</div>';
                 }).join('');
             }
             
@@ -934,7 +930,7 @@ export function getSubsidiesPage(userName: string): string {
                     
                     const select = document.getElementById('subsidySelect');
                     select.innerHTML = '<option value="">選択してください</option>' +
-                        subsidies.map(s => \`<option value="\${s.id}">\${s.name} (最大¥\${(s.max_amount || 0).toLocaleString()})</option>\`).join('');
+                        subsidies.map(s => '<option value="' + s.id + '">' + s.name + ' (最大¥' + (s.max_amount || 0).toLocaleString() + ')</option>').join('');
                 } catch (error) {
                     console.error('Failed to load subsidies:', error);
                 }
@@ -954,7 +950,7 @@ export function getSubsidiesPage(userName: string): string {
                         } else {
                             select.innerHTML = '<option value="">選択してください</option>';
                         }
-                        select.innerHTML += clients.map(c => \`<option value="\${c.id}">\${c.name}</option>\`).join('');
+                        select.innerHTML += clients.map(c => '<option value="' + c.id + '">' + c.name + '</option>').join('');
                         if (currentValue) select.value = currentValue;
                     });
                 } catch (error) {
@@ -1011,11 +1007,10 @@ export function getSubsidiesPage(userName: string): string {
                 try {
                     const response = await axios.post('/api/subsidies/fetch-updates');
                     
-                    statusEl.innerHTML = \`
-                        <i class="fas fa-check-circle text-green-600"></i> 
-                        更新完了：\${response.data.updated_count}件
-                        \${response.data.debug ? \`<div class="text-xs mt-1">デバッグ: \${JSON.stringify(response.data.debug)}</div>\` : ''}
-                    \`;
+                    statusEl.innerHTML = 
+                        '<i class="fas fa-check-circle text-green-600"></i> ' +
+                        '更新完了：' + response.data.updated_count + '件' +
+                        (response.data.debug ? '<div class="text-xs mt-1">デバッグ: ' + JSON.stringify(response.data.debug) + '</div>' : '');
                     statusEl.className = 'mt-4 text-sm text-green-600';
                     
                     // 更新履歴に追加
@@ -1103,22 +1098,21 @@ export function getSubsidiesPage(userName: string): string {
                         return;
                     }
                     
-                    resultsEl.innerHTML = \`
-                        <div class="mt-4">
-                            <p class="text-sm text-gray-600 mb-2">
-                                \${response.data.total_count}件見つかりました
-                            </p>
-                            <div class="space-y-2 max-h-64 overflow-y-auto">
-                                \${response.data.results.map(subsidy => \`
-                                    <div class="p-3 bg-gray-50 rounded">
-                                        <h4 class="font-medium text-sm">\${escapeHtml(subsidy.name)}</h4>
-                                        <p class="text-xs text-gray-600 mt-1">\${escapeHtml(subsidy.managing_organization)}</p>
-                                        \${subsidy.url ? \`<a href="\${subsidy.url}" target="_blank" class="text-xs text-blue-600 hover:underline">詳細を見る</a>\` : ''}
-                                    </div>
-                                \`).join('')}
-                            </div>
-                        </div>
-                    \`;
+                    resultsEl.innerHTML = 
+                        '<div class="mt-4">' +
+                            '<p class="text-sm text-gray-600 mb-2">' +
+                                response.data.total_count + '件見つかりました' +
+                            '</p>' +
+                            '<div class="space-y-2 max-h-64 overflow-y-auto">' +
+                                response.data.results.map(subsidy => 
+                                    '<div class="p-3 bg-gray-50 rounded">' +
+                                        '<h4 class="font-medium text-sm">' + escapeHtml(subsidy.name) + '</h4>' +
+                                        '<p class="text-xs text-gray-600 mt-1">' + escapeHtml(subsidy.managing_organization) + '</p>' +
+                                        (subsidy.url ? '<a href="' + subsidy.url + '" target="_blank" class="text-xs text-blue-600 hover:underline">詳細を見る</a>' : '') +
+                                    '</div>'
+                                ).join('') +
+                            '</div>' +
+                        '</div>';
                 } catch (error) {
                     resultsEl.innerHTML = \`
                         <p class="text-red-600 text-sm">
@@ -1145,44 +1139,43 @@ export function getSubsidiesPage(userName: string): string {
                         return;
                     }
                     
-                    container.innerHTML = \`
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">助成金名</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">カテゴリ</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">管理機関</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最大金額</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請数</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                \${subsidies.map(subsidy => \`
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <div class="text-sm font-medium text-gray-900">\${escapeHtml(subsidy.name)}</div>
-                                            \${subsidy.url ? \`<a href="\${subsidy.url}" target="_blank" class="text-xs text-blue-600 hover:underline">詳細を見る</a>\` : ''}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${escapeHtml(subsidy.category)}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${escapeHtml(subsidy.managing_organization)}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            \${subsidy.max_amount ? '¥' + subsidy.max_amount.toLocaleString() : '-'}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\${subsidy.application_count}件</td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                                \${subsidy.status === 'active' ? 'bg-green-100 text-green-800' : 
-                                                  subsidy.status === 'expired' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}">
-                                                \${subsidy.status === 'active' ? '募集中' : 
-                                                  subsidy.status === 'expired' ? '期限切れ' : '常時募集'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                \`).join('')}
-                            </tbody>
-                        </table>
-                    \`;
+                    container.innerHTML = 
+                        '<table class="min-w-full divide-y divide-gray-200">' +
+                            '<thead class="bg-gray-50">' +
+                                '<tr>' +
+                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">助成金名</th>' +
+                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">カテゴリ</th>' +
+                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">管理機関</th>' +
+                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最大金額</th>' +
+                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">申請数</th>' +
+                                    '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>' +
+                                '</tr>' +
+                            '</thead>' +
+                            '<tbody class="bg-white divide-y divide-gray-200">' +
+                                subsidies.map(subsidy => 
+                                    '<tr class="hover:bg-gray-50">' +
+                                        '<td class="px-6 py-4 whitespace-nowrap">' +
+                                            '<div class="text-sm font-medium text-gray-900">' + escapeHtml(subsidy.name) + '</div>' +
+                                            (subsidy.url ? '<a href="' + subsidy.url + '" target="_blank" class="text-xs text-blue-600 hover:underline">詳細を見る</a>' : '') +
+                                        '</td>' +
+                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + escapeHtml(subsidy.category) + '</td>' +
+                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + escapeHtml(subsidy.managing_organization) + '</td>' +
+                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">' +
+                                            (subsidy.max_amount ? '¥' + subsidy.max_amount.toLocaleString() : '-') +
+                                        '</td>' +
+                                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">' + subsidy.application_count + '件</td>' +
+                                        '<td class="px-6 py-4 whitespace-nowrap">' +
+                                            '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ' +
+                                                (subsidy.status === 'active' ? 'bg-green-100 text-green-800' : 
+                                                  subsidy.status === 'expired' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800') + '">' +
+                                                (subsidy.status === 'active' ? '募集中' : 
+                                                  subsidy.status === 'expired' ? '期限切れ' : '常時募集') +
+                                            '</span>' +
+                                        '</td>' +
+                                    '</tr>'
+                                ).join('') +
+                            '</tbody>' +
+                        '</table>';
                 } catch (error) {
                     console.error('Failed to load subsidy database:', error);
                     document.getElementById('subsidyDatabaseList').innerHTML = \`
@@ -1196,7 +1189,7 @@ export function getSubsidiesPage(userName: string): string {
             // 申請詳細表示
             async function showApplicationDetail(applicationId) {
                 try {
-                    const response = await axios.get(\`/api/subsidies/applications/\${applicationId}\`);
+                    const response = await axios.get('/api/subsidies/applications/' + applicationId);
                     const app = response.data.application;
                     
                     const modal = document.getElementById('applicationDetailModal');
@@ -1360,7 +1353,7 @@ export function getSubsidiesPage(userName: string): string {
                 try {
                     console.log('Updating status for application:', applicationId, 'to:', newStatus);
                     
-                    const response = await axios.put(\`/api/subsidies/applications/\${applicationId}\`, {
+                    const response = await axios.put('/api/subsidies/applications/' + applicationId, {
                         status: newStatus
                     });
                     
@@ -1383,7 +1376,7 @@ export function getSubsidiesPage(userName: string): string {
                         // 小さな成功メッセージを表示
                         const message = document.createElement('div');
                         message.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-md shadow-lg z-50';
-                        message.textContent = \`ステータスを「\${statusNames[newStatus]}」に変更しました\`;
+                        message.textContent = 'ステータスを「' + statusNames[newStatus] + '」に変更しました';
                         document.body.appendChild(message);
                         
                         setTimeout(() => {
@@ -1399,7 +1392,7 @@ export function getSubsidiesPage(userName: string): string {
                     console.error('Error status:', error.response?.status);
                     
                     const errorMsg = error.response?.data?.debug || error.response?.data?.error || error.message;
-                    alert(\`ステータスの更新に失敗しました: \${errorMsg}\`);
+                    alert('ステータスの更新に失敗しました: ' + errorMsg);
                     
                     // セレクトボックスを元に戻す
                     showApplicationDetail(applicationId);
@@ -1415,7 +1408,7 @@ export function getSubsidiesPage(userName: string): string {
                         is_completed: cb.checked
                     }));
                     
-                    const response = await axios.put(\`/api/subsidies/applications/\${applicationId}\`, {
+                    const response = await axios.put('/api/subsidies/applications/' + applicationId, {
                         checklist
                     });
                     
@@ -1439,7 +1432,7 @@ export function getSubsidiesPage(userName: string): string {
                 }
                 
                 try {
-                    const response = await axios.delete(\`/api/subsidies/applications/\${applicationId}\`);
+                    const response = await axios.delete('/api/subsidies/applications/' + applicationId);
                     
                     if (response.data.success) {
                         alert('申請を削除しました');
@@ -1501,7 +1494,7 @@ export function getSubsidiesPage(userName: string): string {
                     const formData = new FormData(e.target);
                     
                     try {
-                        const response = await axios.post(\`/api/subsidies/applications/\${applicationId}/documents\`, formData, {
+                        const response = await axios.post('/api/subsidies/applications/' + applicationId + '/documents', formData, {
                             headers: { 'Content-Type': 'multipart/form-data' }
                         });
                         
