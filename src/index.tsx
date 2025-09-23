@@ -642,6 +642,73 @@ app.get('/api/public/create-contacts-table', async (c) => {
   }
 })
 
+// PUBLIC Direct SQL Execution for client_contacts table (NO AUTH REQUIRED)
+app.get('/api/public/create-contacts-table-direct', async (c) => {
+  try {
+    console.log('🔧 Direct SQL: Creating client_contacts table')
+    
+    if (!c.env.DB) {
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    // Step 1: Check if table exists
+    const existingTables = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name = 'client_contacts'
+    `).all()
+    
+    console.log('🔧 Existing client_contacts tables:', existingTables)
+    
+    // Step 2: Create table with explicit SQL
+    const createTableSQL = `
+      CREATE TABLE IF NOT EXISTS client_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        contact_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        notes TEXT NOT NULL,
+        contact_date TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+    
+    console.log('🔧 Executing SQL:', createTableSQL)
+    const result = await c.env.DB.prepare(createTableSQL).run()
+    console.log('🔧 SQL Result:', result)
+    
+    // Step 3: Verify table creation
+    const verifyTables = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name = 'client_contacts'
+    `).all()
+    
+    console.log('🔧 Verification result:', verifyTables)
+    
+    // Step 4: Get table schema
+    const tableSchema = await c.env.DB.prepare(`
+      PRAGMA table_info(client_contacts)
+    `).all()
+    
+    console.log('🔧 Table schema:', tableSchema)
+    
+    return c.json({
+      success: true,
+      message: 'Direct client_contacts table creation completed',
+      existingTablesBefore: existingTables.results || [],
+      createResult: result,
+      existingTablesAfter: verifyTables.results || [],
+      tableSchema: tableSchema.results || [],
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('🔧 Direct SQL Error:', error)
+    return c.json({
+      error: 'Direct table creation failed',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
 // PUBLIC Database schema fix (NO AUTH REQUIRED) 
 app.post('/api/public/fix-schema', async (c) => {
   try {
