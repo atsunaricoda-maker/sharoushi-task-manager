@@ -549,11 +549,7 @@ export function getBusinessManagementPage(user: any) {
                 // Show user-friendly error message
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50';
-                errorDiv.innerHTML = `
-                    <strong>ページ読み込みエラー</strong><br>
-                    一部の機能が正常に動作しない可能性があります。<br>
-                    <button onclick="this.parentElement.remove()" class="text-red-900 underline">閉じる</button>
-                `;
+                errorDiv.innerHTML = `<strong>ページ読み込みエラー</strong><br>一部の機能が正常に動作しない可能性があります。<br><button onclick="this.parentElement.remove()" class="text-red-900 underline">閉じる</button>`;
                 document.body.appendChild(errorDiv);
                 
                 // Auto-remove after 10 seconds
