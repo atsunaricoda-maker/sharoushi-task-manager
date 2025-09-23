@@ -6,6 +6,40 @@ type Bindings = {
 
 export const contactsRouter = new Hono<{ Bindings: Bindings }>()
 
+// Check if client_contacts table exists
+contactsRouter.get('/table-status', async (c) => {
+  try {
+    // Check table existence
+    const tables = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name = 'client_contacts'
+    `).all()
+    
+    const tableExists = tables.results && tables.results.length > 0
+    
+    // If table exists, get schema info
+    let tableSchema = null
+    if (tableExists) {
+      const schema = await c.env.DB.prepare(`
+        PRAGMA table_info(client_contacts)
+      `).all()
+      tableSchema = schema.results
+    }
+    
+    return c.json({
+      success: true,
+      tableExists: tableExists,
+      tableSchema: tableSchema,
+      allTables: tables.results,
+      message: tableExists ? 'client_contacts table exists' : 'client_contacts table not found'
+    })
+  } catch (error) {
+    return c.json({ 
+      error: 'Failed to check table status',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
 // Create new contact record
 contactsRouter.post('/', async (c) => {
   try {
@@ -60,9 +94,29 @@ contactsRouter.post('/', async (c) => {
     })
   } catch (error) {
     console.error('Error creating contact record:', error)
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack',
+      name: error instanceof Error ? error.name : 'Unknown error type'
+    })
+    
+    // Check if it's a database table error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    let userFriendlyMessage = 'Failed to create contact record'
+    
+    if (errorMessage.includes('no such table')) {
+      userFriendlyMessage = 'Database table not found. Please initialize the database first.'
+    } else if (errorMessage.includes('client_contacts')) {
+      userFriendlyMessage = 'client_contacts table is missing. Database initialization required.'
+    }
+    
     return c.json({ 
-      error: 'Failed to create contact record',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: userFriendlyMessage,
+      details: errorMessage,
+      debug: {
+        errorType: error instanceof Error ? error.name : 'Unknown',
+        fullMessage: errorMessage
+      }
     }, 500)
   }
 })
