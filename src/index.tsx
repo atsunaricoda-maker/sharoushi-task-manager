@@ -128,12 +128,30 @@ app.get('/api/setup-auth', async (c) => {
   try {
     const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
     
+    // First, ensure users table exists
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          role TEXT DEFAULT 'user',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
+      console.log('Users table ensured')
+    } catch (tableError) {
+      console.error('Failed to create users table:', tableError)
+    }
+    
     // Check if user exists in database
     let user
     try {
       user = await c.env.DB.prepare(`
         SELECT id, email, name FROM users WHERE email = ?
       `).bind('tanaka@sharoushi.com').first()
+      console.log('Database user lookup result:', user)
     } catch (dbError) {
       console.error('Database error when checking user:', dbError)
     }
@@ -161,10 +179,30 @@ app.get('/api/setup-auth', async (c) => {
       }
     }
     
+    // Ensure user.id exists and is valid
+    if (!user || !user.id) {
+      console.error('User creation failed - no user ID:', user)
+      return c.json({
+        error: 'User creation failed',
+        debug: 'No user ID found after creation/retrieval',
+        user: user
+      }, 500)
+    }
+    
+    const userId = typeof user.id === 'number' ? user.id : parseInt(user.id)
+    if (isNaN(userId)) {
+      console.error('Invalid user ID:', user.id)
+      return c.json({
+        error: 'Invalid user ID',
+        debug: `User ID is not a valid number: ${user.id}`,
+        user: user
+      }, 500)
+    }
+    
     const tokenPayload = {
-      sub: user.id.toString(),
-      email: user.email,
-      name: user.name,
+      sub: userId.toString(),
+      email: user.email || 'tanaka@sharoushi.com',
+      name: user.name || '田中 太郎',
       role: 'admin'
     }
     
@@ -182,10 +220,11 @@ app.get('/api/setup-auth', async (c) => {
       success: true,
       message: 'Production auth token generated and set as cookie',
       user: {
-        id: user.id,
+        id: userId,
         email: user.email, 
         name: user.name
       },
+      tokenPayload: tokenPayload,
       tokenSet: true,
       timestamp: new Date().toISOString()
     })
