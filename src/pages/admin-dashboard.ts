@@ -252,12 +252,26 @@ export function getAdminDashboardPage(userName: string): string {
 
         // ダッシュボード更新
         async function updateDashboard() {
-            const period = document.getElementById('periodSelect').value;
+            const periodSelect = document.getElementById('periodSelect');
+            if (!periodSelect) {
+                console.error('periodSelect element not found in updateDashboard');
+                return;
+            }
+            
+            const period = periodSelect.value;
             let params = { period };
             
             if (period === 'custom') {
-                params.start_date = document.getElementById('startDate').value;
-                params.end_date = document.getElementById('endDate').value;
+                const startDateEl = document.getElementById('startDate');
+                const endDateEl = document.getElementById('endDate');
+                
+                if (!startDateEl || !endDateEl) {
+                    console.error('Date range elements not found');
+                    return;
+                }
+                
+                params.start_date = startDateEl.value;
+                params.end_date = endDateEl.value;
             }
 
             try {
@@ -554,7 +568,13 @@ export function getAdminDashboardPage(userName: string): string {
         }
         
         function generateCSVContent() {
-            const period = document.getElementById('periodSelect').value;
+            const periodSelect = document.getElementById('periodSelect');
+            if (!periodSelect) {
+                console.error('periodSelect element not found');
+                return 'エラー: 期間選択要素が見つかりません';
+            }
+            
+            const period = periodSelect.value;
             const periodLabel = {
                 'week': '今週',
                 'month': '今月', 
