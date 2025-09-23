@@ -240,6 +240,185 @@ app.route('/api/contacts', contactsRouter)
 app.route('/api/reports', reportsRouter)
 app.route('/api/subsidies', subsidiesRouter)
 
+// PUBLIC Database initialization endpoint (NO AUTH REQUIRED)
+app.post('/api/public/init-db', async (c) => {
+  try {
+    console.log('🔧 PUBLIC: Database initialization started')
+    
+    if (!c.env.DB) {
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    const results = []
+    
+    // Create subsidy_applications table
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS subsidy_applications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          subsidy_name TEXT NOT NULL,
+          client_id INTEGER,
+          status TEXT DEFAULT 'preparing',
+          expected_amount INTEGER,
+          deadline_date TEXT,
+          notes TEXT,
+          created_by INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
+      results.push('✅ subsidy_applications table created')
+    } catch (error) {
+      results.push(`❌ subsidy_applications: ${error.message}`)
+    }
+    
+    // Create subsidies master table
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS subsidies (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          managing_organization TEXT NOT NULL,
+          description TEXT,
+          max_amount INTEGER,
+          subsidy_rate REAL,
+          application_period_type TEXT DEFAULT 'anytime',
+          url TEXT,
+          is_active BOOLEAN DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
+      results.push('✅ subsidies master table created')
+    } catch (error) {
+      results.push(`❌ subsidies: ${error.message}`)
+    }
+    
+    // Create subsidy_checklists table
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS subsidy_checklists (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          application_id INTEGER NOT NULL,
+          item_name TEXT NOT NULL,
+          category TEXT,
+          is_required BOOLEAN DEFAULT 0,
+          is_completed BOOLEAN DEFAULT 0,
+          completed_by INTEGER,
+          completed_at DATETIME,
+          notes TEXT,
+          display_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (application_id) REFERENCES subsidy_applications(id)
+        )
+      `).run()
+      results.push('✅ subsidy_checklists table created')
+    } catch (error) {
+      results.push(`❌ subsidy_checklists: ${error.message}`)
+    }
+    
+    // Create subsidy_documents table
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS subsidy_documents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          application_id INTEGER NOT NULL,
+          document_name TEXT NOT NULL,
+          document_type TEXT NOT NULL,
+          file_name TEXT,
+          file_size INTEGER,
+          file_type TEXT,
+          status TEXT DEFAULT 'uploaded',
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          notes TEXT,
+          FOREIGN KEY (application_id) REFERENCES subsidy_applications(id)
+        )
+      `).run()
+      results.push('✅ subsidy_documents table created')
+    } catch (error) {
+      results.push(`❌ subsidy_documents: ${error.message}`)
+    }
+    
+    // Verify table creation
+    const tables = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name IN (
+        'subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents'
+      )
+    `).all()
+    
+    console.log('🔧 PUBLIC: Database initialization completed:', results)
+    
+    return c.json({
+      success: true,
+      message: 'Database tables initialized successfully (PUBLIC ENDPOINT)',
+      results: results,
+      tablesCreated: tables.results?.map(t => t.name) || [],
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('🔧 PUBLIC: Database initialization error:', error)
+    return c.json({
+      error: 'Database initialization failed',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
+// PUBLIC Database status check (NO AUTH REQUIRED)
+app.get('/api/public/db-status', async (c) => {
+  try {
+    console.log('🔧 PUBLIC: Checking database status')
+    
+    if (!c.env.DB) {
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    // Check which tables exist
+    const tables = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table'
+    `).all()
+    
+    const requiredTables = ['subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents']
+    const existingTables = tables.results?.map(t => t.name) || []
+    const missingTables = requiredTables.filter(table => !existingTables.includes(table))
+    
+    // Get row counts for existing tables
+    const tableCounts = {}
+    for (const table of existingTables) {
+      if (requiredTables.includes(table)) {
+        try {
+          const count = await c.env.DB.prepare(`SELECT COUNT(*) as count FROM ${table}`).first()
+          tableCounts[table] = count.count
+        } catch (countError) {
+          tableCounts[table] = 'Error: ' + countError.message
+        }
+      }
+    }
+    
+    return c.json({
+      success: true,
+      database: {
+        connected: true,
+        existingTables: existingTables,
+        missingTables: missingTables,
+        tableCounts: tableCounts,
+        allTablesExist: missingTables.length === 0
+      },
+      message: missingTables.length === 0 ? 'All required tables exist' : `Missing tables: ${missingTables.join(', ')}`,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('🔧 PUBLIC: Database status check error:', error)
+    return c.json({
+      error: 'Database status check failed',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
 // Debug endpoint to check database tables (public)
 app.get('/api/debug/tables', async (c) => {
   try {
