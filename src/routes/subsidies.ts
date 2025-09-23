@@ -491,7 +491,7 @@ subsidiesRouter.post('/applications', async (c) => {
       return c.json({ error: 'Database table error', debug: tableError.message }, 500)
     }
 
-    // Insert using simple field structure compatible with frontend
+    // Insert using adaptive strategy to handle both old and new schemas
     console.log('🔧 Preparing INSERT query with values:', {
       subsidy_name: finalSubsidyName,
       client_id: finalClientId, 
@@ -504,16 +504,45 @@ subsidiesRouter.post('/applications', async (c) => {
     
     let result
     try {
+      // First try new schema (preferred)
+      console.log('🔧 Attempting INSERT with new schema (subsidy_name)...')
       result = await c.env.DB.prepare(`
         INSERT INTO subsidy_applications 
         (subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
       
-      console.log('✅ INSERT successful, result:', result)
+      console.log('✅ NEW SCHEMA INSERT successful, result:', result)
     } catch (insertError) {
-      console.error('🚫 INSERT failed:', insertError.message, insertError.stack)
-      throw insertError
+      console.error('🚫 New schema INSERT failed:', insertError.message)
+      
+      // If new schema fails, try old schema compatibility mode
+      try {
+        console.log('🔧 Attempting INSERT with old schema compatibility (subsidy_id=NULL)...')
+        
+        // Find a subsidy_id by name lookup, or use NULL
+        let subsidyId = null
+        try {
+          const subsidyLookup = await c.env.DB.prepare(`
+            SELECT id FROM subsidies WHERE name = ? LIMIT 1
+          `).bind(finalSubsidyName).first()
+          subsidyId = subsidyLookup?.id || null
+          console.log('🔧 Subsidy name lookup result:', subsidyLookup)
+        } catch (lookupError) {
+          console.log('🔧 Subsidy lookup failed, using NULL:', lookupError.message)
+        }
+        
+        result = await c.env.DB.prepare(`
+          INSERT INTO subsidy_applications 
+          (subsidy_id, subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(subsidyId, finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+        
+        console.log('✅ OLD SCHEMA COMPATIBILITY INSERT successful, result:', result)
+      } catch (fallbackError) {
+        console.error('🚫 Both INSERT strategies failed:', fallbackError.message)
+        throw new Error(`INSERT failed with both schemas. New: ${insertError.message}, Old: ${fallbackError.message}`)
+      }
     }
     
     const applicationId = result.meta.last_row_id
