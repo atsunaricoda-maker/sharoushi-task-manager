@@ -78,14 +78,29 @@ contactsRouter.post('/', async (c) => {
       finalContactDate
     ).run()
     
-    // Update client's last_contact_date
-    await c.env.DB.prepare(`
-      UPDATE clients 
-      SET 
-        last_contact_date = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).bind(finalContactDate, client_id).run()
+    // Update client's last_contact_date (with error handling for missing column)
+    try {
+      await c.env.DB.prepare(`
+        UPDATE clients 
+        SET 
+          last_contact_date = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(finalContactDate, client_id).run()
+    } catch (updateError) {
+      console.warn('Could not update last_contact_date (column may not exist):', updateError.message)
+      // Try updating only updated_at if last_contact_date column doesn't exist
+      try {
+        await c.env.DB.prepare(`
+          UPDATE clients 
+          SET updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).bind(client_id).run()
+      } catch (fallbackError) {
+        console.warn('Could not update client timestamp:', fallbackError.message)
+        // Continue anyway - contact record was created successfully
+      }
+    }
     
     return c.json({
       success: true,

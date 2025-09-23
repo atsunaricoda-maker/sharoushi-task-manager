@@ -671,6 +671,37 @@ app.post('/api/public/init-db', async (c) => {
       results.push(`⚠️  Sample data: ${error.message}`)
     }
     
+    // Schema migration: Add missing columns to existing tables
+    try {
+      // Check if last_contact_date column exists in clients table
+      const clientColumns = await c.env.DB.prepare(`
+        PRAGMA table_info(clients)
+      `).all()
+      
+      const hasLastContactDate = clientColumns.results?.some(col => col.name === 'last_contact_date')
+      
+      if (!hasLastContactDate) {
+        await c.env.DB.prepare(`
+          ALTER TABLE clients ADD COLUMN last_contact_date TEXT
+        `).run()
+        results.push('✅ Added last_contact_date column to clients table')
+      } else {
+        results.push('✅ last_contact_date column already exists')
+      }
+      
+      // Check for other missing columns and add them if needed
+      const hasUpdatedAt = clientColumns.results?.some(col => col.name === 'updated_at')
+      if (!hasUpdatedAt) {
+        await c.env.DB.prepare(`
+          ALTER TABLE clients ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        `).run()
+        results.push('✅ Added updated_at column to clients table')
+      }
+      
+    } catch (migrationError) {
+      results.push(`⚠️  Schema migration: ${migrationError.message}`)
+    }
+    
     // Verify table creation
     const tables = await c.env.DB.prepare(`
       SELECT name FROM sqlite_master WHERE type='table' AND name IN (
