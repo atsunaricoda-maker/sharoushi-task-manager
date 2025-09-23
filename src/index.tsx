@@ -72,7 +72,23 @@ async function checkAuth(c: any, next: any) {
     try {
       const parts = token.split('.')
       if (parts.length >= 2) {
-        const payloadStr = atob(parts[1])
+        // Safe base64 decoding function
+        function safeBase64Decode(str) {
+          try {
+            const binary = atob(str)
+            const bytes = new Uint8Array(binary.length)
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i)
+            }
+            const decoder = new TextDecoder()
+            return decoder.decode(bytes)
+          } catch (e) {
+            // Fallback to simple atob for basic tokens
+            return atob(str)
+          }
+        }
+        
+        const payloadStr = safeBase64Decode(parts[1])
         const payload = JSON.parse(payloadStr)
         
         // Check if token is expired
@@ -151,19 +167,34 @@ app.get('/test-early', (c) => {
 app.get('/api/emergency-auth', async (c) => {
   // 🚨 EMERGENCY: Bypasses authentication issues temporarily
   try {
-    // Simple hardcoded token payload - avoids database issues
+    // Simple hardcoded token payload - using English names to avoid encoding issues
     const simplePayload = {
       sub: '1',
       email: 'tanaka@sharoushi.com',
-      name: '田中 太郎',
+      name: 'Tanaka Taro', // Use English name to avoid btoa() issues
       role: 'admin',
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
     }
     
-    // Create a simple JWT manually using base64 encoding
-    const header = btoa(JSON.stringify({ typ: 'JWT', alg: 'none' }))
-    const payload = btoa(JSON.stringify(simplePayload))
+    // Safe base64 encoding function for Cloudflare Workers
+    function safeBase64Encode(str) {
+      // Convert to UTF-8 bytes first, then encode
+      const encoder = new TextEncoder()
+      const bytes = encoder.encode(str)
+      let binary = ''
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      return btoa(binary)
+    }
+    
+    // Create a simple JWT manually using safe base64 encoding
+    const headerStr = JSON.stringify({ typ: 'JWT', alg: 'none' })
+    const payloadStr = JSON.stringify(simplePayload)
+    
+    const header = safeBase64Encode(headerStr)
+    const payload = safeBase64Encode(payloadStr)
     const simpleToken = `${header}.${payload}.`
     
     // Set cookie with the simple token
@@ -180,7 +211,7 @@ app.get('/api/emergency-auth', async (c) => {
       user: {
         id: 1,
         email: 'tanaka@sharoushi.com',
-        name: '田中 太郎'
+        name: 'Tanaka Taro'
       },
       authType: 'emergency-bypass',
       timestamp: new Date().toISOString()
@@ -189,7 +220,8 @@ app.get('/api/emergency-auth', async (c) => {
     console.error('Emergency auth error:', error)
     return c.json({
       error: 'Emergency auth failed',
-      debug: error.message
+      debug: error.message,
+      stack: error.stack
     }, 500)
   }
 })
