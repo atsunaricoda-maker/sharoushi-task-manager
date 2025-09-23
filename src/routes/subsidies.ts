@@ -68,24 +68,23 @@ subsidiesRouter.get('/applications', async (c) => {
     
     console.log('🔧 subsidy_applications table exists')
     
-    // Get applications with proper JOIN queries for client and subsidy names
+    // Get applications with proper JOIN queries for client names
+    // Handle both old structure (with subsidy_id) and new structure (with subsidy_name)
     const applications = await c.env.DB.prepare(`
       SELECT 
         sa.id,
-        sa.subsidy_id,
+        sa.subsidy_name,
         sa.client_id, 
         sa.status, 
-        sa.amount_requested as expected_amount,
-        sa.submission_deadline as deadline_date,
+        sa.expected_amount,
+        sa.deadline_date,
         sa.notes,
         sa.created_at,
         sa.created_by,
         c.name as client_name,
-        c.company_name,
-        s.name as subsidy_name
+        c.company_name
       FROM subsidy_applications sa
       LEFT JOIN clients c ON sa.client_id = c.id
-      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
       WHERE sa.created_by = ?
       ORDER BY sa.created_at DESC
     `).bind(userId).all()
@@ -244,21 +243,73 @@ subsidiesRouter.post('/applications', async (c) => {
     const body = await c.req.json()
     console.log('Request body:', body)
     
+    // Support both old API format and new frontend format
     const { 
-      subsidyId, clientId, amountRequested, submissionDeadline, notes
+      // Old format
+      subsidyId, clientId, amountRequested, submissionDeadline,
+      // New frontend format
+      subsidy_name, client_id, expected_amount, deadline_date, status,
+      // Common
+      notes
     } = body
     
-    if (!subsidyId || !clientId || !amountRequested) {
-      console.log('Missing required fields:', { subsidyId, clientId, amountRequested })
-      return c.json({ error: '必要な項目が不足しています' }, 400)
+    // Use frontend format if available, fallback to old format
+    const finalSubsidyName = subsidy_name || subsidyId
+    const finalClientId = client_id || clientId
+    const finalAmount = expected_amount || amountRequested
+    const finalDeadline = deadline_date || submissionDeadline
+    const finalStatus = status || 'preparing'
+    
+    console.log('Processed fields:', { 
+      subsidy_name: finalSubsidyName, 
+      client_id: finalClientId, 
+      amount: finalAmount,
+      deadline: finalDeadline,
+      status: finalStatus
+    })
+    
+    if (!finalSubsidyName || !finalClientId) {
+      console.log('Missing required fields:', { 
+        subsidy_name: finalSubsidyName, 
+        client_id: finalClientId 
+      })
+      return c.json({ error: '助成金名と顧問先は必須です' }, 400)
     }
 
-    // Begin transaction
+    // Check if subsidy_applications table exists, if not create simple version
+    try {
+      const tableCheck = await c.env.DB.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='subsidy_applications'
+      `).first()
+      
+      if (!tableCheck) {
+        console.log('Creating subsidy_applications table...')
+        await c.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS subsidy_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subsidy_name TEXT NOT NULL,
+            client_id INTEGER,
+            status TEXT DEFAULT 'preparing',
+            expected_amount INTEGER,
+            deadline_date TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run()
+        console.log('subsidy_applications table created')
+      }
+    } catch (tableError) {
+      console.error('Error checking/creating table:', tableError)
+    }
+
+    // Insert using simple field structure compatible with frontend
     const result = await c.env.DB.prepare(`
       INSERT INTO subsidy_applications 
-      (subsidy_id, client_id, amount_requested, submission_deadline, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(subsidyId, clientId, amountRequested, submissionDeadline, notes, userId).run()
+      (subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
     
     const applicationId = result.meta.last_row_id
 
