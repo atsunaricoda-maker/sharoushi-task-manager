@@ -165,9 +165,14 @@ export function getSimplifiedClientsPage(userName: string): string {
                 <div class="w-2/3 p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold">連絡履歴</h3>
-                        <button onclick="openAddContactModal()" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
-                            <i class="fas fa-plus mr-1"></i>連絡記録を追加
-                        </button>
+                        <div class="flex space-x-2">
+                            <button onclick="initializeDatabase()" class="bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700" title="データベーステーブルを初期化">
+                                <i class="fas fa-database mr-1"></i>DB初期化
+                            </button>
+                            <button onclick="openAddContactModal()" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
+                                <i class="fas fa-plus mr-1"></i>連絡記録を追加
+                            </button>
+                        </div>
                     </div>
                     <div id="contactHistoryPanel" class="max-h-96 overflow-y-auto">
                         <!-- Contact history will be loaded here -->
@@ -666,9 +671,38 @@ export function getSimplifiedClientsPage(userName: string): string {
                 showToast('連絡記録を追加しました', 'success');
             } catch (error) {
                 console.error('Failed to add contact:', error);
-                showToast('連絡記録の追加に失敗しました', 'error');
+                
+                // Check if it's a database table error
+                if (error.response && error.response.status === 500) {
+                    const errorMessage = error.response.data?.details || error.response.data?.error || '';
+                    if (errorMessage.includes('no such table') || errorMessage.includes('client_contacts')) {
+                        showToast('データベーステーブルが存在しません。管理者にお問い合わせください。', 'error');
+                    } else {
+                        showToast(`連絡記録の追加に失敗しました: ${errorMessage}`, 'error');
+                    }
+                } else {
+                    showToast('連絡記録の追加に失敗しました', 'error');
+                }
             }
         });
+
+        // Database initialization function
+        async function initializeDatabase() {
+            try {
+                showToast('データベースを初期化中...', 'info');
+                
+                const response = await axios.post('/api/public/init-db');
+                
+                if (response.data.success) {
+                    showToast('データベースの初期化が完了しました', 'success');
+                } else {
+                    showToast('データベース初期化に失敗しました', 'error');
+                }
+            } catch (error) {
+                console.error('Database initialization failed:', error);
+                showToast('データベース初期化中にエラーが発生しました', 'error');
+            }
+        }
 
         // Edit client (simplified - just redirect to business page for now)
         function editClient(clientId) {
