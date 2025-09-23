@@ -593,6 +593,55 @@ app.post('/api/public/init-db', async (c) => {
   }
 })
 
+// PUBLIC Client Contacts Table Creation (DIRECT)
+app.get('/api/public/create-contacts-table', async (c) => {
+  try {
+    console.log('🔧 Creating client_contacts table directly')
+    
+    if (!c.env.DB) {
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    // Create client_contacts table
+    const createResult = await c.env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS client_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        contact_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        notes TEXT NOT NULL,
+        contact_date TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_id) REFERENCES clients(id)
+      )
+    `).run()
+    
+    // Verify table creation
+    const tables = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name = 'client_contacts'
+    `).all()
+    
+    console.log('🔧 Client contacts table creation result:', createResult)
+    console.log('🔧 Table verification:', tables)
+    
+    return c.json({
+      success: true,
+      message: 'Client contacts table created successfully',
+      createResult: createResult,
+      tableExists: tables.results?.length > 0,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('🔧 Client contacts table creation error:', error)
+    return c.json({
+      error: 'Client contacts table creation failed',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
 // PUBLIC Database schema fix (NO AUTH REQUIRED) 
 app.post('/api/public/fix-schema', async (c) => {
   try {
