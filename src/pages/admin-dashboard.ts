@@ -252,13 +252,18 @@ export function getAdminDashboardPage(userName: string): string {
 
         // ダッシュボード更新
         async function updateDashboard() {
+            console.log('🔧 updateDashboard called');
             const periodSelect = document.getElementById('periodSelect');
+            console.log('🔧 periodSelect in updateDashboard:', periodSelect);
+            
             if (!periodSelect) {
-                console.error('periodSelect element not found in updateDashboard');
+                console.error('❌ periodSelect element not found in updateDashboard');
                 return;
             }
             
+            console.log('✅ periodSelect found in updateDashboard');
             const period = periodSelect.value;
+            console.log('🔧 period in updateDashboard:', period);
             let params = { period };
             
             if (period === 'custom') {
@@ -568,13 +573,18 @@ export function getAdminDashboardPage(userName: string): string {
         }
         
         function generateCSVContent() {
+            console.log('🔧 generateCSVContent called');
             const periodSelect = document.getElementById('periodSelect');
+            console.log('🔧 periodSelect element:', periodSelect);
+            
             if (!periodSelect) {
-                console.error('periodSelect element not found');
+                console.error('❌ periodSelect element not found');
                 return 'エラー: 期間選択要素が見つかりません';
             }
             
+            console.log('✅ periodSelect found, getting value...');
             const period = periodSelect.value;
+            console.log('🔧 period value:', period);
             const periodLabel = {
                 'week': '今週',
                 'month': '今月', 
