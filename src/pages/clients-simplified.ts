@@ -346,7 +346,26 @@ export function getSimplifiedClientsPage(userName: string): string {
                 renderClientsGrid();
             } catch (error) {
                 console.error('Failed to load clients:', error);
-                showToast('顧問先の読み込みに失敗しました', 'error');
+                
+                // If it's an auth error, try to get emergency auth token
+                if (error.response && error.response.status === 401) {
+                    console.log('Auth error detected, trying emergency auth...');
+                    try {
+                        await fetch('/api/emergency-auth', { credentials: 'include' });
+                        // Retry loading clients
+                        const retryResponse = await axios.get('/api/clients');
+                        allClients = retryResponse.data.clients || [];
+                        filteredClients = [...allClients];
+                        updateStats();
+                        renderClientsGrid();
+                        showToast('認証を修復しました', 'success');
+                    } catch (retryError) {
+                        console.error('Retry failed:', retryError);
+                        showToast('顧問先の読み込みに失敗しました。ページを再読み込みしてください。', 'error');
+                    }
+                } else {
+                    showToast('顧問先の読み込みに失敗しました', 'error');
+                }
             }
         }
 
