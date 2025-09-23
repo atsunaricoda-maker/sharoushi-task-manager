@@ -391,7 +391,15 @@ subsidiesRouter.post('/applications', async (c) => {
     const finalDeadline = deadline_date || submissionDeadline
     const finalStatus = status || 'preparing'
     
-    console.log('🔧 Processed final fields:', { 
+    // Convert undefined values to null for database compatibility
+    const safeSubsidyName = finalSubsidyName || null
+    const safeClientId = isNaN(finalClientId) ? null : finalClientId
+    const safeAmount = isNaN(finalAmount) ? null : finalAmount
+    const safeDeadline = finalDeadline || null
+    const safeStatus = finalStatus || 'preparing'
+    const safeNotes = notes || null
+    
+    console.log('🔧 Processed final fields (before undefined check):', { 
       subsidy_name: finalSubsidyName, 
       client_id: finalClientId, 
       amount: finalAmount,
@@ -400,20 +408,22 @@ subsidiesRouter.post('/applications', async (c) => {
       notes: notes
     })
     
-    // Validate required fields
-    if (!finalSubsidyName || !finalClientId || isNaN(finalClientId)) {
-      console.error('🚫 Missing or invalid required fields:', { 
-        subsidy_name: finalSubsidyName, 
-        client_id: finalClientId,
-        client_id_isNaN: isNaN(finalClientId)
-      })
-      return c.json({ error: '助成金名と顧問先は必須です（顧問先IDが無効です）' }, 400)
-    }
+    console.log('🔧 Safe processed fields (after undefined conversion):', { 
+      subsidy_name: safeSubsidyName, 
+      client_id: safeClientId, 
+      amount: safeAmount,
+      deadline: safeDeadline,
+      status: safeStatus,
+      notes: safeNotes
+    })
     
-    // Validate amount if provided
-    if (finalAmount !== null && finalAmount !== undefined && isNaN(finalAmount)) {
-      console.error('🚫 Invalid expected_amount:', finalAmount)
-      return c.json({ error: '予想受給額は数値である必要があります' }, 400)
+    // Validate required fields using safe values
+    if (!safeSubsidyName || !safeClientId) {
+      console.error('🚫 Missing required fields:', { 
+        subsidy_name: safeSubsidyName, 
+        client_id: safeClientId
+      })
+      return c.json({ error: '助成金名と顧問先は必須です' }, 400)
     }
     
     console.log('✅ All field validation passed')
@@ -507,11 +517,13 @@ subsidiesRouter.post('/applications', async (c) => {
     // Strategy 1: Minimal INSERT - only essential columns (avoid subsidy_id completely)
     try {
       console.log('🔧 Attempting minimal INSERT (avoiding subsidy_id)...')
+      console.log('🔧 Minimal values:', { safeSubsidyName, safeClientId, safeStatus, safeNotes, userId })
+      
       result = await c.env.DB.prepare(`
         INSERT INTO subsidy_applications 
         (subsidy_name, client_id, status, notes, created_by, created_at)
         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).bind(finalSubsidyName, finalClientId, finalStatus, notes, userId).run()
+      `).bind(safeSubsidyName, safeClientId, safeStatus, safeNotes, userId).run()
       
       console.log('✅ MINIMAL INSERT successful, result:', result)
     } catch (minimalError) {
@@ -520,11 +532,13 @@ subsidiesRouter.post('/applications', async (c) => {
       // Strategy 2: Try with optional columns
       try {
         console.log('🔧 Attempting INSERT with optional columns...')
+        console.log('🔧 Optional values:', { safeSubsidyName, safeClientId, safeAmount, safeDeadline, safeStatus, safeNotes, userId })
+        
         result = await c.env.DB.prepare(`
           INSERT INTO subsidy_applications 
           (subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+        `).bind(safeSubsidyName, safeClientId, safeAmount, safeDeadline, safeStatus, safeNotes, userId).run()
         
         console.log('✅ OPTIONAL COLUMNS INSERT successful, result:', result)
       } catch (optionalError) {
@@ -533,12 +547,13 @@ subsidiesRouter.post('/applications', async (c) => {
         // Strategy 3: Last resort - provide subsidy_id with guaranteed valid value
         try {
           console.log('🔧 Last resort: Providing subsidy_id=1 (hardcoded)...')
+          console.log('🔧 LastResort values:', { subsidyId: 1, safeSubsidyName, safeClientId, safeAmount, safeDeadline, safeStatus, safeNotes, userId })
           
           result = await c.env.DB.prepare(`
             INSERT INTO subsidy_applications 
             (subsidy_id, subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
             VALUES (1, ?, ?, ?, ?, ?, ?, ?)
-          `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+          `).bind(safeSubsidyName, safeClientId, safeAmount, safeDeadline, safeStatus, safeNotes, userId).run()
           
           console.log('✅ HARDCODED SUBSIDY_ID INSERT successful, result:', result)
         } catch (lastResortError) {
