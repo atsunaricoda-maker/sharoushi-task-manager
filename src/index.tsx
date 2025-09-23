@@ -122,6 +122,83 @@ app.get('/test-early', (c) => {
   return c.text('Early test route is working!')
 })
 
+// PRODUCTION AUTH SETUP (TEMPORARILY ENABLED FOR DEBUGGING)
+app.get('/api/setup-auth', async (c) => {
+  // 🚨 TEMPORARY: Production auth setup - FOR DEBUGGING ONLY
+  try {
+    const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+    
+    // Check if user exists in database
+    let user
+    try {
+      user = await c.env.DB.prepare(`
+        SELECT id, email, name FROM users WHERE email = ?
+      `).bind('tanaka@sharoushi.com').first()
+    } catch (dbError) {
+      console.error('Database error when checking user:', dbError)
+    }
+    
+    // If user doesn't exist, create it
+    if (!user) {
+      try {
+        const result = await c.env.DB.prepare(`
+          INSERT INTO users (email, name, role, created_at) 
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        `).bind('tanaka@sharoushi.com', '田中 太郎', 'admin').run()
+        
+        user = {
+          id: result.meta.last_row_id,
+          email: 'tanaka@sharoushi.com',
+          name: '田中 太郎'
+        }
+        console.log('Created new user:', user)
+      } catch (insertError) {
+        console.error('Failed to create user:', insertError)
+        return c.json({
+          error: 'Failed to create user',
+          debug: insertError.message
+        }, 500)
+      }
+    }
+    
+    const tokenPayload = {
+      sub: user.id.toString(),
+      email: user.email,
+      name: user.name,
+      role: 'admin'
+    }
+    
+    const token = await generateToken(tokenPayload, jwtSecret)
+    
+    // Set cookie for production
+    setCookie(c, 'auth-token', token, {
+      httpOnly: true,
+      secure: true, // Always secure for production
+      sameSite: 'Lax',
+      maxAge: 24 * 60 * 60 // 24 hours
+    })
+    
+    return c.json({
+      success: true,
+      message: 'Production auth token generated and set as cookie',
+      user: {
+        id: user.id,
+        email: user.email, 
+        name: user.name
+      },
+      tokenSet: true,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Production auth setup error:', error)
+    return c.json({
+      error: 'Failed to set up production auth',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
 // Development auth token generator (TEMPORARILY ENABLED FOR TESTING)
 app.get('/api/dev-auth', async (c) => {
   // 🚨 SECURITY: Temporarily enabled for testing - REMOVE IN PRODUCTION
