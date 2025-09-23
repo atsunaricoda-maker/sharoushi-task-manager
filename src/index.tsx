@@ -205,6 +205,13 @@ app.get('/api/emergency-auth', async (c) => {
       maxAge: 24 * 60 * 60
     })
     
+    // Check for redirect parameter
+    const redirect = c.req.query('redirect')
+    if (redirect) {
+      console.log(`Emergency auth with redirect to: ${redirect}`)
+      return c.redirect(redirect)
+    }
+    
     return c.json({
       success: true,
       message: 'Emergency auth bypass activated',
@@ -2315,15 +2322,49 @@ app.get('/clients-debug', async (c) => {
 
 // Clients page
 app.get('/clients', async (c) => {
-  // ALWAYS use development mode for now (force bypass)
-  const testUser = { name: '田中 太郎', role: 'admin' }
+  // Check environment - allow bypass in development
+  const environment = c.env.ENVIRONMENT || 'production'
+  if (environment === 'development') {
+    const testUser = { name: '田中 太郎', role: 'admin' }
+    
+    // Set cache-busting headers
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+    c.header('Pragma', 'no-cache')
+    c.header('Expires', '0')
+    
+    return c.html(getSimplifiedClientsPage(testUser.name))
+  }
   
-  // Set cache-busting headers
-  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
-  c.header('Pragma', 'no-cache')
-  c.header('Expires', '0')
+  // Production authentication - check for token first
+  let token = getCookie(c, 'auth-token')
   
-  return c.html(getSimplifiedClientsPage(testUser.name))
+  // If no token, try to get emergency auth token
+  if (!token) {
+    console.log('No token found, checking for emergency auth capability')
+    // In production, redirect to emergency auth endpoint first
+    return c.redirect('/api/emergency-auth?redirect=/clients')
+  }
+  
+  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
+  
+  try {
+    const payload = await verifyToken(token, jwtSecret)
+    
+    if (!payload) {
+      console.log('Token verification failed, trying emergency auth')
+      return c.redirect('/api/emergency-auth?redirect=/clients')
+    }
+    
+    // Set cache-busting headers
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+    c.header('Pragma', 'no-cache')
+    c.header('Expires', '0')
+    
+    return c.html(getSimplifiedClientsPage(payload.name))
+  } catch (error) {
+    console.log('Auth error, redirecting to emergency auth:', error)
+    return c.redirect('/api/emergency-auth?redirect=/clients')
+  }
 })
 
 // Reports page
