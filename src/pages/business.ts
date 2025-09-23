@@ -538,6 +538,35 @@ export function getBusinessManagementPage(user: any) {
             }, duration);
         }
 
+        // Global error handler for null reference errors
+        window.addEventListener('error', function(e) {
+            if (e.message.includes('Cannot set properties of null') || 
+                e.message.includes('Cannot read properties of null')) {
+                console.error('🚫 Null reference error caught:', e.message);
+                console.error('🚫 Error location:', e.filename, 'line', e.lineno);
+                console.error('🚫 Stack:', e.error?.stack);
+                
+                // Show user-friendly error message
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50';
+                errorDiv.innerHTML = `
+                    <strong>ページ読み込みエラー</strong><br>
+                    一部の機能が正常に動作しない可能性があります。<br>
+                    <button onclick="this.parentElement.remove()" class="text-red-900 underline">閉じる</button>
+                `;
+                document.body.appendChild(errorDiv);
+                
+                // Auto-remove after 10 seconds
+                setTimeout(() => {
+                    if (errorDiv.parentElement) {
+                        errorDiv.remove();
+                    }
+                }, 10000);
+                
+                return true; // Prevent default error handling
+            }
+        });
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             await loadAllData();
@@ -620,11 +649,21 @@ export function getBusinessManagementPage(user: any) {
             
             // Today's schedule count
             const todayEvents = scheduleEvents.filter(e => dayjs(e.start_time).isSame(today, 'day'));
-            document.getElementById('todayScheduleCount').textContent = todayEvents.length;
+            const todayScheduleCountEl = document.getElementById('todayScheduleCount');
+            if (todayScheduleCountEl) {
+                todayScheduleCountEl.textContent = todayEvents.length;
+            } else {
+                console.warn('todayScheduleCount element not found');
+            }
             
             // Active tasks count
             const activeTasks = tasks.filter(t => t.status === 'in_progress' || t.status === 'pending');
-            document.getElementById('activeTasksCount').textContent = activeTasks.length;
+            const activeTasksCountEl = document.getElementById('activeTasksCount');
+            if (activeTasksCountEl) {
+                activeTasksCountEl.textContent = activeTasks.length;
+            } else {
+                console.warn('activeTasksCount element not found');
+            }
             
             // Upcoming deadlines (this week)
             const weekStart = today.startOf('week');
@@ -633,7 +672,12 @@ export function getBusinessManagementPage(user: any) {
                 const eventDate = dayjs(e.start_time);
                 return eventDate.isAfter(weekStart) && eventDate.isBefore(weekEnd) && e.entry_type === 'deadline';
             });
-            document.getElementById('upcomingDeadlinesCount').textContent = weekDeadlines.length;
+            const upcomingDeadlinesCountEl = document.getElementById('upcomingDeadlinesCount');
+            if (upcomingDeadlinesCountEl) {
+                upcomingDeadlinesCountEl.textContent = weekDeadlines.length;
+            } else {
+                console.warn('upcomingDeadlinesCount element not found');
+            }
             
             // Week meetings count
             const weekMeetings = scheduleEvents.filter(e => {
@@ -641,7 +685,12 @@ export function getBusinessManagementPage(user: any) {
                 return eventDate.isAfter(weekStart) && eventDate.isBefore(weekEnd) && 
                        (e.entry_type === 'meeting' || e.entry_type === 'visit');
             });
-            document.getElementById('weekMeetingsCount').textContent = weekMeetings.length;
+            const weekMeetingsCountEl = document.getElementById('weekMeetingsCount');
+            if (weekMeetingsCountEl) {
+                weekMeetingsCountEl.textContent = weekMeetings.length;
+            } else {
+                console.warn('weekMeetingsCount element not found');
+            }
         }
 
         // Render mini calendar
@@ -795,7 +844,19 @@ export function getBusinessManagementPage(user: any) {
         // Render overview content
         function renderOverviewContent() {
             const container = document.getElementById('overviewContent');
-            const filter = document.getElementById('overviewFilter').value;
+            const filterEl = document.getElementById('overviewFilter');
+            
+            if (!container) {
+                console.error('overviewContent container not found');
+                return;
+            }
+            
+            if (!filterEl) {
+                console.error('overviewFilter element not found');
+                return;
+            }
+            
+            const filter = filterEl.value;
             
             const today = dayjs();
             const weekStart = today.startOf('week');
@@ -875,8 +936,24 @@ export function getBusinessManagementPage(user: any) {
         // Render tasks content
         function renderTasksContent() {
             const container = document.getElementById('tasksList');
-            const statusFilter = document.getElementById('taskStatusFilter').value;
-            const priorityFilter = document.getElementById('taskPriorityFilter').value;
+            const statusFilterEl = document.getElementById('taskStatusFilter');
+            const priorityFilterEl = document.getElementById('taskPriorityFilter');
+            
+            if (!container) {
+                console.error('tasksList container not found');
+                return;
+            }
+            
+            if (!statusFilterEl || !priorityFilterEl) {
+                console.error('Task filter elements not found', {
+                    statusFilter: !!statusFilterEl,
+                    priorityFilter: !!priorityFilterEl
+                });
+                return;
+            }
+            
+            const statusFilter = statusFilterEl.value;
+            const priorityFilter = priorityFilterEl.value;
             
             let filteredTasks = tasks.filter(task => {
                 if (statusFilter && task.status !== statusFilter) return false;
@@ -913,7 +990,19 @@ export function getBusinessManagementPage(user: any) {
         // Render schedule content
         function renderScheduleContent() {
             const container = document.getElementById('scheduleList');
-            const typeFilter = document.getElementById('scheduleTypeFilter').value;
+            const typeFilterEl = document.getElementById('scheduleTypeFilter');
+            
+            if (!container) {
+                console.error('scheduleList container not found');
+                return;
+            }
+            
+            if (!typeFilterEl) {
+                console.error('scheduleTypeFilter element not found');
+                return;
+            }
+            
+            const typeFilter = typeFilterEl.value;
             
             let filteredEvents = scheduleEvents.filter(event => {
                 if (typeFilter && event.entry_type !== typeFilter) return false;
