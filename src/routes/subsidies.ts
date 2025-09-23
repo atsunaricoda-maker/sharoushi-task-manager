@@ -296,8 +296,20 @@ subsidiesRouter.post('/applications', async (c) => {
     
     // Use frontend format if available, fallback to old format
     const finalSubsidyName = subsidy_name || subsidyId
-    const finalClientId = client_id || clientId
-    const finalAmount = expected_amount || amountRequested
+    
+    // Convert string values to proper types (FormData sends everything as strings)
+    let finalClientId = client_id || clientId
+    if (typeof finalClientId === 'string') {
+      finalClientId = parseInt(finalClientId)
+      console.log('🔧 Converted client_id from string to number:', finalClientId)
+    }
+    
+    let finalAmount = expected_amount || amountRequested
+    if (typeof finalAmount === 'string') {
+      finalAmount = finalAmount === '' ? null : parseInt(finalAmount)
+      console.log('🔧 Converted expected_amount from string to number:', finalAmount)
+    }
+    
     const finalDeadline = deadline_date || submissionDeadline
     const finalStatus = status || 'preparing'
     
@@ -310,15 +322,23 @@ subsidiesRouter.post('/applications', async (c) => {
       notes: notes
     })
     
-    if (!finalSubsidyName || !finalClientId) {
-      console.error('🚫 Missing required fields:', { 
+    // Validate required fields
+    if (!finalSubsidyName || !finalClientId || isNaN(finalClientId)) {
+      console.error('🚫 Missing or invalid required fields:', { 
         subsidy_name: finalSubsidyName, 
-        client_id: finalClientId 
+        client_id: finalClientId,
+        client_id_isNaN: isNaN(finalClientId)
       })
-      return c.json({ error: '助成金名と顧問先は必須です' }, 400)
+      return c.json({ error: '助成金名と顧問先は必須です（顧問先IDが無効です）' }, 400)
     }
     
-    console.log('✅ Required field validation passed')
+    // Validate amount if provided
+    if (finalAmount !== null && finalAmount !== undefined && isNaN(finalAmount)) {
+      console.error('🚫 Invalid expected_amount:', finalAmount)
+      return c.json({ error: '予想受給額は数値である必要があります' }, 400)
+    }
+    
+    console.log('✅ All field validation passed')
 
     // Check if subsidy_applications table exists, if not create simple version
     console.log('🔧 Checking if subsidy_applications table exists...')
