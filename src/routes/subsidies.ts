@@ -83,26 +83,68 @@ subsidiesRouter.get('/applications', async (c) => {
     
     console.log('🔧 subsidy_applications table exists')
     
-    // Get applications with proper JOIN queries for client names
-    // Handle both old structure (with subsidy_id) and new structure (with subsidy_name)
-    const applications = await c.env.DB.prepare(`
-      SELECT 
-        sa.id,
-        sa.subsidy_name,
-        sa.client_id, 
-        sa.status, 
-        sa.expected_amount,
-        sa.deadline_date,
-        sa.notes,
-        sa.created_at,
-        sa.created_by,
-        c.name as client_name,
-        c.company_name
-      FROM subsidy_applications sa
-      LEFT JOIN clients c ON sa.client_id = c.id
-      WHERE sa.created_by = ?
-      ORDER BY sa.created_at DESC
-    `).bind(userId).all()
+    // Get applications - check what columns actually exist first
+    let applications
+    try {
+      // First try with subsidy_name (new schema)
+      applications = await c.env.DB.prepare(`
+        SELECT 
+          sa.id,
+          sa.subsidy_name,
+          sa.client_id, 
+          sa.status, 
+          sa.expected_amount,
+          sa.deadline_date,
+          sa.notes,
+          sa.created_at,
+          sa.created_by,
+          c.name as client_name,
+          c.company_name
+        FROM subsidy_applications sa
+        LEFT JOIN clients c ON sa.client_id = c.id
+        WHERE sa.created_by = ?
+        ORDER BY sa.created_at DESC
+      `).bind(userId).all()
+    } catch (newSchemaError) {
+      console.log('🔧 New schema failed, trying old schema:', newSchemaError.message)
+      try {
+        // Fallback to old schema with subsidy_id
+        applications = await c.env.DB.prepare(`
+          SELECT 
+            sa.id,
+            sa.subsidy_id,
+            s.name as subsidy_name,
+            sa.client_id, 
+            sa.status, 
+            sa.expected_amount,
+            sa.deadline_date,
+            sa.notes,
+            sa.created_at,
+            sa.created_by,
+            c.name as client_name,
+            c.company_name
+          FROM subsidy_applications sa
+          LEFT JOIN clients c ON sa.client_id = c.id
+          LEFT JOIN subsidies s ON sa.subsidy_id = s.id
+          WHERE sa.created_by = ?
+          ORDER BY sa.created_at DESC
+        `).bind(userId).all()
+        console.log('🔧 Old schema query successful')
+      } catch (oldSchemaError) {
+        console.error('🔧 Both schema queries failed:', oldSchemaError.message)
+        // Return basic query without subsidy name
+        applications = await c.env.DB.prepare(`
+          SELECT 
+            sa.*,
+            c.name as client_name,
+            c.company_name
+          FROM subsidy_applications sa
+          LEFT JOIN clients c ON sa.client_id = c.id
+          WHERE sa.created_by = ?
+          ORDER BY sa.created_at DESC
+        `).bind(userId).all()
+      }
+    }
     
     console.log('🔧 Query result:', applications?.results?.length, 'applications found')
     
