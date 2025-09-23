@@ -353,6 +353,45 @@ app.route('/api/contacts', contactsRouter)
 app.route('/api/reports', reportsRouter)
 app.route('/api/subsidies', subsidiesRouter)
 
+// PUBLIC Database reset endpoint (NO AUTH REQUIRED)
+app.delete('/api/public/reset-db', async (c) => {
+  try {
+    console.log('🔧 PUBLIC: Database reset started')
+    
+    if (!c.env.DB) {
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    const results = []
+    
+    // Drop existing tables to start fresh
+    const tablesToDrop = ['subsidy_applications', 'subsidy_checklists', 'subsidy_documents']
+    
+    for (const table of tablesToDrop) {
+      try {
+        await c.env.DB.prepare(`DROP TABLE IF EXISTS ${table}`).run()
+        results.push(`✅ Dropped table: ${table}`)
+      } catch (error) {
+        results.push(`⚠️ Drop ${table}: ${error.message}`)
+      }
+    }
+    
+    return c.json({
+      success: true,
+      message: 'Database tables dropped successfully',
+      results,
+      timestamp: new Date().toISOString()
+    })
+    
+  } catch (error) {
+    console.error('PUBLIC DB reset failed:', error)
+    return c.json({
+      error: 'Database reset failed',
+      details: error.message
+    }, 500)
+  }
+})
+
 // PUBLIC Database initialization endpoint (NO AUTH REQUIRED)
 app.post('/api/public/init-db', async (c) => {
   try {
