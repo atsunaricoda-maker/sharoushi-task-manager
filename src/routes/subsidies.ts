@@ -115,55 +115,7 @@ subsidiesRouter.get('/applications', async (c) => {
   }
 })
 
-// Create new subsidy application
-subsidiesRouter.post('/applications', async (c) => {
-  try {
-    const body = await c.req.json()
-    const { 
-      subsidy_name, 
-      client_id, 
-      application_date, 
-      deadline_date, 
-      expected_amount, 
-      status, 
-      notes 
-    } = body
-    
-    // Validate required fields
-    if (!subsidy_name || !client_id) {
-      return c.json({ error: '助成金名と顧問先は必須です' }, 400)
-    }
-    
-    const result = await c.env.DB.prepare(`
-      INSERT INTO subsidy_applications (
-        subsidy_name, 
-        client_id, 
-        application_date, 
-        deadline_date, 
-        expected_amount, 
-        status, 
-        notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      subsidy_name, 
-      client_id, 
-      application_date || null, 
-      deadline_date || null, 
-      expected_amount || null, 
-      status || 'preparing', 
-      notes || null
-    ).run()
-    
-    return c.json({
-      success: true,
-      id: result.meta.last_row_id,
-      message: '申請プロジェクトを作成しました'
-    })
-  } catch (error) {
-    console.error('Error creating application:', error)
-    return c.json({ error: 'Failed to create application' }, 500)
-  }
-})
+// Old simple POST route removed - using comprehensive version below
 
 // Get all subsidies (master list)
 subsidiesRouter.get('/', async (c) => {
