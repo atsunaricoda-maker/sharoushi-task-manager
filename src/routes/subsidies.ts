@@ -3,6 +3,84 @@ import type { Bindings } from '../types'
 
 const subsidiesRouter = new Hono<{ Bindings: Bindings }>()
 
+// Database initialization endpoint (PUBLIC ACCESS for emergency setup)
+subsidiesRouter.get('/init-db', async (c) => {
+  try {
+    console.log('🔧 Initializing subsidy database tables...')
+    
+    // Create subsidy_applications table with all required columns
+    await c.env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS subsidy_applications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subsidy_name TEXT NOT NULL,
+        client_id INTEGER,
+        status TEXT DEFAULT 'preparing',
+        expected_amount INTEGER,
+        deadline_date TEXT,
+        notes TEXT,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run()
+    
+    // Check current table schema
+    const tableInfo = await c.env.DB.prepare(`
+      SELECT sql FROM sqlite_master WHERE type='table' AND name='subsidy_applications'
+    `).first()
+    
+    console.log('✅ Table schema:', tableInfo?.sql)
+    
+    // Try to add missing columns (ignore errors if they already exist)
+    const columnsToAdd = [
+      { name: 'expected_amount', type: 'INTEGER' },
+      { name: 'deadline_date', type: 'TEXT' },
+      { name: 'notes', type: 'TEXT' },
+      { name: 'status', type: "TEXT DEFAULT 'preparing'" }
+    ]
+    
+    for (const column of columnsToAdd) {
+      try {
+        await c.env.DB.prepare(`
+          ALTER TABLE subsidy_applications ADD COLUMN ${column.name} ${column.type}
+        `).run()
+        console.log(`✅ Added column: ${column.name}`)
+      } catch (error) {
+        console.log(`🔧 Column ${column.name} may already exist:`, error.message)
+      }
+    }
+    
+    // Create subsidy_checklists table  
+    await c.env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS subsidy_checklists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        application_id INTEGER NOT NULL,
+        item_name TEXT NOT NULL,
+        category TEXT,
+        is_required INTEGER DEFAULT 0,
+        is_completed INTEGER DEFAULT 0,
+        display_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (application_id) REFERENCES subsidy_applications(id)
+      )
+    `).run()
+    
+    return c.json({ 
+      success: true,
+      message: 'Database initialized successfully',
+      schema: tableInfo?.sql
+    })
+    
+  } catch (error) {
+    console.error('🚫 Database initialization failed:', error)
+    return c.json({ 
+      error: 'Database initialization failed',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
 // Test endpoint for debugging
 subsidiesRouter.get('/test', async (c) => {
   try {
@@ -369,6 +447,44 @@ subsidiesRouter.post('/applications', async (c) => {
         console.log('✅ subsidy_applications table created successfully')
       } else {
         console.log('✅ subsidy_applications table already exists')
+        
+        // Check if expected_amount column exists, if not add it
+        try {
+          console.log('🔧 Checking if expected_amount column exists...')
+          const columnCheck = await c.env.DB.prepare(`
+            SELECT sql FROM sqlite_master WHERE type='table' AND name='subsidy_applications'
+          `).first()
+          
+          console.log('🔧 Current table schema:', columnCheck?.sql)
+          
+          if (columnCheck?.sql && !columnCheck.sql.includes('expected_amount')) {
+            console.log('🔧 Adding missing expected_amount column...')
+            await c.env.DB.prepare(`
+              ALTER TABLE subsidy_applications ADD COLUMN expected_amount INTEGER
+            `).run()
+            console.log('✅ expected_amount column added successfully')
+          }
+          
+          // Check for other potentially missing columns
+          const requiredColumns = ['deadline_date', 'notes', 'status'];
+          for (const column of requiredColumns) {
+            if (columnCheck?.sql && !columnCheck.sql.includes(column)) {
+              console.log(`🔧 Adding missing ${column} column...`)
+              let columnType = 'TEXT';
+              if (column === 'status') {
+                columnType = "TEXT DEFAULT 'preparing'";
+              }
+              await c.env.DB.prepare(`
+                ALTER TABLE subsidy_applications ADD COLUMN ${column} ${columnType}
+              `).run()
+              console.log(`✅ ${column} column added successfully`)
+            }
+          }
+          
+        } catch (alterError) {
+          console.error('🚫 Error adding columns:', alterError.message)
+          // Continue anyway - the columns might already exist
+        }
       }
     } catch (tableError) {
       console.error('🚫 Error checking/creating table:', tableError.message, tableError.stack)
