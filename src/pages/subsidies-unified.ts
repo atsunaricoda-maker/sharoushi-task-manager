@@ -657,6 +657,12 @@ export function getUnifiedSubsidiesPage(userName: string): string {
                 const formData = new FormData(e.target);
                 const applicationData = Object.fromEntries(formData);
                 
+                // Debug: Log form data
+                console.log('🔧 Form data being submitted:', applicationData);
+                
+                // Debug: Check auth status
+                console.log('🔧 Document cookies:', document.cookie);
+                
                 await axios.post('/api/subsidies/applications', applicationData);
                 closeNewApplicationModal();
                 await loadApplications();
@@ -664,15 +670,56 @@ export function getUnifiedSubsidiesPage(userName: string): string {
                 showToast('申請プロジェクトを作成しました', 'success');
             } catch (error) {
                 console.error('Failed to create application:', error);
-                showToast('申請プロジェクトの作成に失敗しました', 'error');
+                
+                // Enhanced error display for debugging
+                let errorMessage = '申請プロジェクトの作成に失敗しました';
+                if (error.response) {
+                    console.error('Error response:', error.response.data);
+                    console.error('Error status:', error.response.status);
+                    if (error.response.data && error.response.data.error) {
+                        errorMessage += ': ' + error.response.data.error;
+                    }
+                    if (error.response.data && error.response.data.debug) {
+                        console.error('Debug info:', error.response.data.debug);
+                    }
+                } else if (error.message) {
+                    errorMessage += ': ' + error.message;
+                    console.error('Error message:', error.message);
+                }
+                
+                showToast(errorMessage, 'error');
             }
         });
 
+        // Debug: Add request interceptor
+        axios.interceptors.request.use(
+            config => {
+                console.log('🔧 Axios request config:', config);
+                console.log('🔧 Request headers:', config.headers);
+                return config;
+            },
+            error => {
+                console.error('🚫 Axios request error:', error);
+                return Promise.reject(error);
+            }
+        );
+        
         // Auth error handling
         axios.interceptors.response.use(
-            response => response,
+            response => {
+                console.log('✅ Axios response successful:', response.status);
+                return response;
+            },
             error => {
+                console.error('🚫 Axios response error:', error);
+                if (error.response) {
+                    console.error('🚫 Response data:', error.response.data);
+                    console.error('🚫 Response status:', error.response.status);
+                    console.error('🚫 Response headers:', error.response.headers);
+                }
+                
                 if (error.response && error.response.status === 401) {
+                    console.log('🚫 401 error - redirecting to login');
                     window.location.href = '/login';
                 }
                 return Promise.reject(error);
