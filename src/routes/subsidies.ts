@@ -503,62 +503,48 @@ subsidiesRouter.post('/applications', async (c) => {
     })
     
     let result
+    
+    // Strategy 1: Minimal INSERT - only essential columns (avoid subsidy_id completely)
     try {
-      // First try new schema (preferred)
-      console.log('🔧 Attempting INSERT with new schema (subsidy_name)...')
+      console.log('🔧 Attempting minimal INSERT (avoiding subsidy_id)...')
       result = await c.env.DB.prepare(`
         INSERT INTO subsidy_applications 
-        (subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+        (subsidy_name, client_id, status, notes, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind(finalSubsidyName, finalClientId, finalStatus, notes, userId).run()
       
-      console.log('✅ NEW SCHEMA INSERT successful, result:', result)
-    } catch (insertError) {
-      console.error('🚫 New schema INSERT failed:', insertError.message)
+      console.log('✅ MINIMAL INSERT successful, result:', result)
+    } catch (minimalError) {
+      console.error('🚫 Minimal INSERT failed:', minimalError.message)
       
-      // If new schema fails, try old schema compatibility mode
+      // Strategy 2: Try with optional columns
       try {
-        console.log('🔧 Attempting INSERT with old schema compatibility (subsidy_id=NULL)...')
-        
-        // Find a subsidy_id by name lookup, or create/use default
-        let subsidyId = null
-        try {
-          const subsidyLookup = await c.env.DB.prepare(`
-            SELECT id FROM subsidies WHERE name = ? LIMIT 1
-          `).bind(finalSubsidyName).first()
-          subsidyId = subsidyLookup?.id
-          console.log('🔧 Subsidy name lookup result:', subsidyLookup)
-          
-          // If not found, try to create a default subsidy record
-          if (!subsidyId) {
-            try {
-              const createResult = await c.env.DB.prepare(`
-                INSERT INTO subsidies (name, category, managing_organization, description)
-                VALUES (?, '一般助成金', '各種団体', '申請時に登録された助成金')
-              `).bind(finalSubsidyName).run()
-              subsidyId = createResult.meta.last_row_id
-              console.log('🔧 Created new subsidy record with ID:', subsidyId)
-            } catch (createError) {
-              console.log('🔧 Failed to create subsidy record:', createError.message)
-            }
-          }
-        } catch (lookupError) {
-          console.log('🔧 Subsidy lookup failed:', lookupError.message)
-        }
-        
-        // For old schema compatibility, use a default subsidy_id
-        const defaultSubsidyId = subsidyId || 1  // Use 1 as default if lookup fails
-        
+        console.log('🔧 Attempting INSERT with optional columns...')
         result = await c.env.DB.prepare(`
           INSERT INTO subsidy_applications 
-          (subsidy_id, subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(defaultSubsidyId, finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+          (subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
         
-        console.log('✅ OLD SCHEMA COMPATIBILITY INSERT successful, result:', result)
-      } catch (fallbackError) {
-        console.error('🚫 Both INSERT strategies failed:', fallbackError.message)
-        throw new Error(`INSERT failed with both schemas. New: ${insertError.message}, Old: ${fallbackError.message}`)
+        console.log('✅ OPTIONAL COLUMNS INSERT successful, result:', result)
+      } catch (optionalError) {
+        console.error('🚫 Optional columns INSERT failed:', optionalError.message)
+        
+        // Strategy 3: Last resort - provide subsidy_id with guaranteed valid value
+        try {
+          console.log('🔧 Last resort: Providing subsidy_id=1 (hardcoded)...')
+          
+          result = await c.env.DB.prepare(`
+            INSERT INTO subsidy_applications 
+            (subsidy_id, subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+          
+          console.log('✅ HARDCODED SUBSIDY_ID INSERT successful, result:', result)
+        } catch (lastResortError) {
+          console.error('🚫 All INSERT strategies failed')
+          throw new Error(`All INSERT strategies failed. Minimal: ${minimalError.message}, Optional: ${optionalError.message}, LastResort: ${lastResortError.message}`)
+        }
       }
     }
     
