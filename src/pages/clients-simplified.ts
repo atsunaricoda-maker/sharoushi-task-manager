@@ -678,7 +678,7 @@ export function getSimplifiedClientsPage(userName: string): string {
                     if (errorMessage.includes('no such table') || errorMessage.includes('client_contacts')) {
                         showToast('データベーステーブルが存在しません。管理者にお問い合わせください。', 'error');
                     } else {
-                        showToast(`連絡記録の追加に失敗しました: ${errorMessage}`, 'error');
+                        showToast('連絡記録の追加に失敗しました: ' + errorMessage, 'error');
                     }
                 } else {
                     showToast('連絡記録の追加に失敗しました', 'error');

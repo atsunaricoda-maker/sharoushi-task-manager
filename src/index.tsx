@@ -458,6 +458,76 @@ app.post('/api/public/init-db', async (c) => {
     
     const results = []
     
+    // Create users table first
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          role TEXT DEFAULT 'sharoushi',
+          avatar_url TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
+      results.push('✅ users table created')
+    } catch (error) {
+      results.push(`❌ users: ${error.message}`)
+    }
+    
+    // Create clients table (CORE TABLE - REQUIRED)
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS clients (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          company_name TEXT,
+          email TEXT,
+          phone TEXT,
+          address TEXT,
+          employee_count INTEGER DEFAULT 0,
+          contract_plan TEXT,
+          monthly_fee DECIMAL(10,2),
+          notes TEXT,
+          last_contact_date TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run()
+      results.push('✅ clients table created (CORE TABLE)')
+    } catch (error) {
+      results.push(`❌ clients: ${error.message}`)
+    }
+    
+    // Create tasks table
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT,
+          client_id INTEGER NOT NULL,
+          assignee_id INTEGER NOT NULL,
+          task_type TEXT NOT NULL DEFAULT 'regular',
+          status TEXT DEFAULT 'pending',
+          priority TEXT DEFAULT 'medium',
+          due_date DATE,
+          estimated_hours DECIMAL(4,1),
+          actual_hours DECIMAL(4,1),
+          progress INTEGER DEFAULT 0,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_id) REFERENCES clients (id),
+          FOREIGN KEY (assignee_id) REFERENCES users (id)
+        )
+      `).run()
+      results.push('✅ tasks table created')
+    } catch (error) {
+      results.push(`❌ tasks: ${error.message}`)
+    }
+    
     // Create subsidy_applications table
     try {
       await c.env.DB.prepare(`
@@ -567,10 +637,37 @@ app.post('/api/public/init-db', async (c) => {
       results.push(`❌ client_contacts: ${error.message}`)
     }
     
+    // Add sample data for immediate functionality
+    try {
+      // Add a sample user if none exists
+      const userCount = await c.env.DB.prepare('SELECT COUNT(*) as count FROM users').first()
+      if (userCount.count === 0) {
+        await c.env.DB.prepare(`
+          INSERT INTO users (email, name, role) 
+          VALUES ('tanaka@sharoushi.com', '田中 太郎', 'admin')
+        `).run()
+        results.push('✅ Sample user added')
+      }
+      
+      // Add sample clients if none exist
+      const clientCount = await c.env.DB.prepare('SELECT COUNT(*) as count FROM clients').first()
+      if (clientCount.count === 0) {
+        await c.env.DB.prepare(`
+          INSERT INTO clients (name, company_name, email, phone, address, employee_count, contract_plan, notes) 
+          VALUES 
+          ('株式会社サンプル', 'Sample Company', 'contact@sample.co.jp', '03-1234-5678', '東京都渋谷区', 50, 'スタンダードプラン', 'サンプル顧問先です'),
+          ('テスト商事', 'Test Trading', 'info@test-trading.jp', '06-9876-5432', '大阪市北区', 30, 'ライトプラン', 'テスト用の顧問先')
+        `).run()
+        results.push('✅ Sample clients added')
+      }
+    } catch (error) {
+      results.push(`⚠️  Sample data: ${error.message}`)
+    }
+    
     // Verify table creation
     const tables = await c.env.DB.prepare(`
       SELECT name FROM sqlite_master WHERE type='table' AND name IN (
-        'subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents', 'client_contacts'
+        'users', 'clients', 'tasks', 'subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents', 'client_contacts'
       )
     `).all()
     
@@ -2210,7 +2307,7 @@ app.get('/clients', async (c) => {
   const environment = c.env.ENVIRONMENT || 'production'
   if (environment === 'development') {
     const testUser = { name: '田中 太郎', role: 'admin' }
-    return c.html(getClientsPage(testUser.name))
+    return c.html(getSimplifiedClientsPage(testUser.name))
   }
   
   // Production authentication
