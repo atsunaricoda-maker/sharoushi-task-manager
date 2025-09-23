@@ -520,23 +520,40 @@ subsidiesRouter.post('/applications', async (c) => {
       try {
         console.log('🔧 Attempting INSERT with old schema compatibility (subsidy_id=NULL)...')
         
-        // Find a subsidy_id by name lookup, or use NULL
+        // Find a subsidy_id by name lookup, or create/use default
         let subsidyId = null
         try {
           const subsidyLookup = await c.env.DB.prepare(`
             SELECT id FROM subsidies WHERE name = ? LIMIT 1
           `).bind(finalSubsidyName).first()
-          subsidyId = subsidyLookup?.id || null
+          subsidyId = subsidyLookup?.id
           console.log('🔧 Subsidy name lookup result:', subsidyLookup)
+          
+          // If not found, try to create a default subsidy record
+          if (!subsidyId) {
+            try {
+              const createResult = await c.env.DB.prepare(`
+                INSERT INTO subsidies (name, category, managing_organization, description)
+                VALUES (?, '一般助成金', '各種団体', '申請時に登録された助成金')
+              `).bind(finalSubsidyName).run()
+              subsidyId = createResult.meta.last_row_id
+              console.log('🔧 Created new subsidy record with ID:', subsidyId)
+            } catch (createError) {
+              console.log('🔧 Failed to create subsidy record:', createError.message)
+            }
+          }
         } catch (lookupError) {
-          console.log('🔧 Subsidy lookup failed, using NULL:', lookupError.message)
+          console.log('🔧 Subsidy lookup failed:', lookupError.message)
         }
+        
+        // For old schema compatibility, use a default subsidy_id
+        const defaultSubsidyId = subsidyId || 1  // Use 1 as default if lookup fails
         
         result = await c.env.DB.prepare(`
           INSERT INTO subsidy_applications 
           (subsidy_id, subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(subsidyId, finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+        `).bind(defaultSubsidyId, finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
         
         console.log('✅ OLD SCHEMA COMPATIBILITY INSERT successful, result:', result)
       } catch (fallbackError) {
