@@ -479,6 +479,94 @@ app.post('/api/public/init-db', async (c) => {
   }
 })
 
+// PUBLIC Database schema fix (NO AUTH REQUIRED) 
+app.post('/api/public/fix-schema', async (c) => {
+  try {
+    console.log('🔧 PUBLIC: Fixing database schema')
+    
+    if (!c.env.DB) {
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    const results = []
+    
+    // Check and add missing columns to subsidy_applications table
+    try {
+      // Get current table structure
+      const columns = await c.env.DB.prepare(`
+        PRAGMA table_info(subsidy_applications)
+      `).all()
+      
+      const existingColumns = columns.results?.map(col => col.name) || []
+      console.log('Existing subsidy_applications columns:', existingColumns)
+      
+      // Add subsidy_name column if missing
+      if (!existingColumns.includes('subsidy_name')) {
+        await c.env.DB.prepare(`
+          ALTER TABLE subsidy_applications 
+          ADD COLUMN subsidy_name TEXT
+        `).run()
+        results.push('✅ Added subsidy_name column')
+      } else {
+        results.push('ℹ️ subsidy_name column already exists')
+      }
+      
+      // Add other missing columns if needed
+      const requiredColumns = [
+        { name: 'expected_amount', type: 'INTEGER' },
+        { name: 'deadline_date', type: 'TEXT' },
+        { name: 'notes', type: 'TEXT' },
+        { name: 'created_by', type: 'INTEGER' },
+        { name: 'updated_at', type: 'DATETIME DEFAULT CURRENT_TIMESTAMP' }
+      ]
+      
+      for (const col of requiredColumns) {
+        if (!existingColumns.includes(col.name)) {
+          await c.env.DB.prepare(`
+            ALTER TABLE subsidy_applications 
+            ADD COLUMN ${col.name} ${col.type}
+          `).run()
+          results.push(`✅ Added ${col.name} column`)
+        }
+      }
+      
+    } catch (schemaError) {
+      results.push(`❌ Schema fix error: ${schemaError.message}`)
+    }
+    
+    // Update existing records with default values if needed
+    try {
+      const updateResult = await c.env.DB.prepare(`
+        UPDATE subsidy_applications 
+        SET subsidy_name = COALESCE(subsidy_name, 'Legacy Application'),
+            created_by = COALESCE(created_by, 1),
+            updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+        WHERE subsidy_name IS NULL OR created_by IS NULL
+      `).run()
+      
+      if (updateResult.changes > 0) {
+        results.push(`✅ Updated ${updateResult.changes} existing records`)
+      }
+    } catch (updateError) {
+      results.push(`❌ Update error: ${updateError.message}`)
+    }
+    
+    return c.json({
+      success: true,
+      message: 'Database schema fix completed',
+      results: results,
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('🔧 PUBLIC: Schema fix error:', error)
+    return c.json({
+      error: 'Schema fix failed',
+      debug: error.message,
+      stack: error.stack
+    }, 500)
+  }
+})
+
 // PUBLIC Database status check (NO AUTH REQUIRED)
 app.get('/api/public/db-status', async (c) => {
   try {
@@ -499,11 +587,20 @@ app.get('/api/public/db-status', async (c) => {
     
     // Get row counts for existing tables
     const tableCounts = {}
+    // Get column info for subsidy_applications table
+    let subsidy_applications_columns = []
+    
     for (const table of existingTables) {
       if (requiredTables.includes(table)) {
         try {
           const count = await c.env.DB.prepare(`SELECT COUNT(*) as count FROM ${table}`).first()
           tableCounts[table] = count.count
+          
+          // Get column info for subsidy_applications table
+          if (table === 'subsidy_applications') {
+            const columns = await c.env.DB.prepare(`PRAGMA table_info(${table})`).all()
+            subsidy_applications_columns = columns.results?.map(col => col.name) || []
+          }
         } catch (countError) {
           tableCounts[table] = 'Error: ' + countError.message
         }
@@ -517,7 +614,8 @@ app.get('/api/public/db-status', async (c) => {
         existingTables: existingTables,
         missingTables: missingTables,
         tableCounts: tableCounts,
-        allTablesExist: missingTables.length === 0
+        allTablesExist: missingTables.length === 0,
+        subsidy_applications_columns: subsidy_applications_columns
       },
       message: missingTables.length === 0 ? 'All required tables exist' : `Missing tables: ${missingTables.join(', ')}`,
       timestamp: new Date().toISOString()
