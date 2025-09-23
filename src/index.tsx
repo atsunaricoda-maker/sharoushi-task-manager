@@ -1695,6 +1695,7 @@ app.get('/', async (c) => {
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
     <script>
         let currentUser = null;
+        let workloadChartInstance = null;
         
         // Initialize
         async function init() {
@@ -1840,9 +1841,15 @@ app.get('/', async (c) => {
                 return;
             }
             
+            // Destroy existing chart if it exists
+            if (workloadChartInstance) {
+                workloadChartInstance.destroy();
+                workloadChartInstance = null;
+            }
+            
             const ctx = chartElement.getContext('2d');
             
-            new Chart(ctx, {
+            workloadChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: workloadData.map(w => w.name),
