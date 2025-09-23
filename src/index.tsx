@@ -1720,12 +1720,18 @@ app.get('/', async (c) => {
                 const statsRes = await axios.get('/api/dashboard/stats');
                 const stats = statsRes.data;
                 
-                document.getElementById('todayCount').textContent = stats.today;
-                document.getElementById('overdueCount').textContent = stats.overdue;
-                document.getElementById('weekCount').textContent = stats.thisWeek;
+                // Safe DOM element updates with null checks
+                const todayCountEl = document.getElementById('todayCount');
+                const overdueCountEl = document.getElementById('overdueCount');
+                const weekCountEl = document.getElementById('weekCount');
+                const inProgressCountEl = document.getElementById('inProgressCount');
+                
+                if (todayCountEl) todayCountEl.textContent = stats.today;
+                if (overdueCountEl) overdueCountEl.textContent = stats.overdue;
+                if (weekCountEl) weekCountEl.textContent = stats.thisWeek;
                 
                 const inProgress = stats.statusDistribution.find(s => s.status === 'in_progress');
-                document.getElementById('inProgressCount').textContent = inProgress ? inProgress.count : 0;
+                if (inProgressCountEl) inProgressCountEl.textContent = inProgress ? inProgress.count : 0;
                 
                 drawWorkloadChart(stats.workload);
                 
@@ -1773,6 +1779,11 @@ app.get('/', async (c) => {
         
         function displayTasks(tasks) {
             const taskList = document.getElementById('taskList');
+            
+            if (!taskList) {
+                console.error('taskList element not found');
+                return;
+            }
             
             if (tasks.length === 0) {
                 taskList.innerHTML = '<p class="text-gray-500 text-center py-4">タスクがありません</p>';
@@ -1822,7 +1833,14 @@ app.get('/', async (c) => {
         }
         
         function drawWorkloadChart(workloadData) {
-            const ctx = document.getElementById('workloadChart').getContext('2d');
+            const chartElement = document.getElementById('workloadChart');
+            
+            if (!chartElement) {
+                console.error('workloadChart element not found');
+                return;
+            }
+            
+            const ctx = chartElement.getContext('2d');
             
             new Chart(ctx, {
                 type: 'bar',
@@ -1865,35 +1883,57 @@ app.get('/', async (c) => {
         
         // Task Modal Functions
         function openTaskModal() {
-            document.getElementById('taskModal').classList.add('active');
+            const taskModal = document.getElementById('taskModal');
+            if (taskModal) {
+                taskModal.classList.add('active');
+            } else {
+                console.error('taskModal element not found');
+            }
         }
         
         function closeTaskModal() {
-            document.getElementById('taskModal').classList.remove('active');
-            document.getElementById('taskForm').reset();
+            const taskModal = document.getElementById('taskModal');
+            const taskForm = document.getElementById('taskForm');
+            
+            if (taskModal) taskModal.classList.remove('active');
+            if (taskForm) taskForm.reset();
         }
         
         // Task form submission
-        document.getElementById('taskForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = new FormData(e.target);
-            const taskData = Object.fromEntries(formData);
-            
-            try {
-                await axios.post('/api/tasks', taskData);
-                closeTaskModal();
-                await loadDashboard();
-                alert('タスクを作成しました');
-            } catch (error) {
-                alert('タスクの作成に失敗しました');
-            }
-        });
+        const taskFormElement = document.getElementById('taskForm');
+        if (taskFormElement) {
+            taskFormElement.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const formData = new FormData(e.target);
+                const taskData = Object.fromEntries(formData);
+                
+                try {
+                    await axios.post('/api/tasks', taskData);
+                    closeTaskModal();
+                    await loadDashboard();
+                    alert('タスクを作成しました');
+                } catch (error) {
+                    alert('タスクの作成に失敗しました');
+                }
+            });
+        } else {
+            console.warn('taskForm element not found, skipping event listener');
+        }
         
         // AI Task Generation
         async function generateTasksWithAI() {
-            const clientId = document.getElementById('aiClientSelect').value;
-            const month = document.getElementById('aiMonthSelect').value;
+            const clientSelectEl = document.getElementById('aiClientSelect');
+            const monthSelectEl = document.getElementById('aiMonthSelect');
+            
+            if (!clientSelectEl || !monthSelectEl) {
+                console.error('AI select elements not found');
+                alert('AI機能の要素が見つかりません');
+                return;
+            }
+            
+            const clientId = clientSelectEl.value;
+            const month = monthSelectEl.value;
             
             if (!clientId || !month) {
                 alert('顧問先と対象月を選択してください');
@@ -1901,6 +1941,12 @@ app.get('/', async (c) => {
             }
             
             const resultDiv = document.getElementById('aiGenerationResult');
+            if (!resultDiv) {
+                console.error('aiGenerationResult element not found');
+                alert('結果表示要素が見つかりません');
+                return;
+            }
+            
             resultDiv.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-2xl text-purple-600"></i><p class="mt-2">AIがタスクを生成中...</p></div>';
             
             try {
@@ -1928,8 +1974,11 @@ app.get('/', async (c) => {
             }
         }
         
-        // Set default month
-        document.getElementById('aiMonthSelect').value = new Date().toISOString().slice(0, 7);
+        // Set default month (with null check)
+        const aiMonthSelectEl = document.getElementById('aiMonthSelect');
+        if (aiMonthSelectEl) {
+            aiMonthSelectEl.value = new Date().toISOString().slice(0, 7);
+        }
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', init);
