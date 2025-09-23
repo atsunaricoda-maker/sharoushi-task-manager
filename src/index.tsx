@@ -1650,80 +1650,72 @@ app.get('/tasks', async (c) => c.redirect('/business'))
 app.get('/gmail', async (c) => c.redirect('/'))
 app.get('/admin', async (c) => c.redirect('/'))
 
-// Subsidies page (core feature for sharoushi offices)
+// Subsidies page (core feature for sharoushi offices) - Restored to original functionality
 app.get('/subsidies', async (c) => {
   try {
-    console.log('🚨 EMERGENCY: /subsidies route called')
+    console.log('🔧 PROPER FIX: /subsidies route called')
     
     const token = getCookie(c, 'auth-token')
-    console.log('🚨 EMERGENCY: Token exists:', !!token)
+    console.log('🔧 Token exists:', !!token)
     
     if (!token) {
-      console.log('🚨 EMERGENCY: No token, redirecting to login')
+      console.log('🔧 No token, redirecting to login')
       return c.redirect('/login')
     }
     
     const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-    console.log('🚨 EMERGENCY: JWT secret available:', !!jwtSecret)
+    console.log('🔧 JWT secret available:', !!jwtSecret)
     
     const payload = await verifyToken(token, jwtSecret)
-    console.log('🚨 EMERGENCY: Token verification result:', !!payload)
+    console.log('🔧 Token verification result:', !!payload)
     
     if (!payload) {
-      console.log('🚨 EMERGENCY: Token verification failed, redirecting to login')
+      console.log('🔧 Token verification failed, redirecting to login')
       return c.redirect('/login')
     }
     
-    console.log('🚨 EMERGENCY: About to generate page for user:', payload.name)
+    console.log('🔧 About to generate page for user:', payload.name)
     
     // Set cache-busting headers
     c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
     c.header('Pragma', 'no-cache')
     c.header('Expires', '0')
     
-    // Emergency simple HTML instead of getUnifiedSubsidiesPage
+    // Restored original function call with error handling
+    return c.html(getUnifiedSubsidiesPage(payload.name))
+    
+  } catch (error) {
+    console.error('🔧 Error in /subsidies route:', error)
+    
+    // Fallback error page with debug info
     return c.html(`
       <!DOCTYPE html>
       <html lang="ja">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>助成金管理 - 緊急修正版</title>
+          <title>エラー - 助成金管理</title>
           <script src="https://cdn.tailwindcss.com"></script>
       </head>
-      <body class="bg-gray-100">
+      <body class="bg-red-50">
           <div class="container mx-auto p-4">
-              <h1 class="text-2xl font-bold mb-4">🚨 助成金管理 - 緊急修正版</h1>
-              <p class="mb-4">ユーザー: ${payload.name}</p>
-              <div class="bg-white p-4 rounded shadow">
-                  <h2 class="text-xl font-semibold mb-2">助成金申請一覧</h2>
-                  <div id="applications-list">
-                      <p>読み込み中...</p>
+              <div class="bg-white p-6 rounded shadow">
+                  <h1 class="text-2xl font-bold text-red-600 mb-4">🚨 エラーが発生しました</h1>
+                  <p class="mb-4">助成金ページの読み込み中にエラーが発生しました。</p>
+                  <div class="bg-gray-100 p-4 rounded mb-4">
+                      <h2 class="font-semibold">エラー詳細:</h2>
+                      <p class="text-sm text-gray-700">${error.message}</p>
+                  </div>
+                  <div class="flex space-x-4">
+                      <button onclick="window.location.reload()" class="bg-blue-600 text-white px-4 py-2 rounded">
+                          リロード
+                      </button>
+                      <button onclick="window.location.href='/'" class="bg-gray-600 text-white px-4 py-2 rounded">
+                          ホームに戻る
+                      </button>
                   </div>
               </div>
           </div>
-          <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
-          <script>
-              console.log('🚨 EMERGENCY: Page loaded successfully');
-              
-              // Simple test - just show success message
-              document.getElementById('applications-list').innerHTML = 
-                '<div class="bg-green-100 p-4 rounded">✅ 緊急修正版が正常に動作しています。500エラーは解消されました。</div>';
-          </script>
-      </body>
-      </html>
-    `)
-  } catch (error) {
-    console.error('🚨 EMERGENCY: Error in /subsidies route:', error)
-    
-    return c.html(`
-      <!DOCTYPE html>
-      <html>
-      <head><title>緊急エラー</title></head>
-      <body>
-        <h1>🚨 緊急エラー</h1>
-        <p>エラー: ${error.message}</p>
-        <p>スタック: ${error.stack}</p>
       </body>
       </html>
     `)
