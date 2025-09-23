@@ -547,10 +547,30 @@ app.post('/api/public/init-db', async (c) => {
       results.push(`❌ subsidy_documents: ${error.message}`)
     }
     
+    // Create client_contacts table (for contact history functionality)
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS client_contacts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id INTEGER NOT NULL,
+          contact_type TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          notes TEXT NOT NULL,
+          contact_date TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (client_id) REFERENCES clients(id)
+        )
+      `).run()
+      results.push('✅ client_contacts table created')
+    } catch (error) {
+      results.push(`❌ client_contacts: ${error.message}`)
+    }
+    
     // Verify table creation
     const tables = await c.env.DB.prepare(`
       SELECT name FROM sqlite_master WHERE type='table' AND name IN (
-        'subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents'
+        'subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents', 'client_contacts'
       )
     `).all()
     
