@@ -237,31 +237,46 @@ subsidiesRouter.get('/', async (c) => {
 // Create new subsidy application
 subsidiesRouter.post('/applications', async (c) => {
   try {
-    console.log('Creating new subsidy application')
+    console.log('🚀 Starting POST /applications - Creating new subsidy application')
     
     const user = c.get('user')
+    console.log('🔧 User from context:', user ? 'Found' : 'Not found', user ? typeof user : 'N/A')
+    
     if (!user) {
+      console.error('🚫 Authentication failed: No user in context')
       return c.json({ error: 'User not authenticated' }, 401)
     }
     
     // Handle both string and number user IDs from different auth methods
     let userId
+    console.log('🔧 Processing user.sub:', typeof user.sub, user.sub)
+    
     if (typeof user.sub === 'string') {
       userId = parseInt(user.sub)
+      console.log('🔧 Converted string user.sub to number:', userId)
     } else if (typeof user.sub === 'number') {
       userId = user.sub
+      console.log('🔧 Using numeric user.sub:', userId)
     } else {
-      console.error('Invalid user.sub type in POST:', typeof user.sub, user.sub)
+      console.error('🚫 Invalid user.sub type in POST:', typeof user.sub, user.sub)
       return c.json({ error: 'Invalid user ID format' }, 400)
     }
     
     if (isNaN(userId)) {
-      console.error('Failed to parse user ID in POST:', user.sub)
+      console.error('🚫 Failed to parse user ID in POST:', user.sub)
       return c.json({ error: 'Invalid user ID' }, 400)
     }
     
-    const body = await c.req.json()
-    console.log('Request body:', body)
+    console.log('✅ User ID successfully parsed:', userId)
+    
+    let body
+    try {
+      body = await c.req.json()
+      console.log('🔧 Request body parsed successfully:', JSON.stringify(body, null, 2))
+    } catch (jsonError) {
+      console.error('🚫 Failed to parse JSON body:', jsonError.message)
+      return c.json({ error: 'Invalid JSON in request body' }, 400)
+    }
     
     // Support both old API format and new frontend format
     const { 
@@ -273,6 +288,12 @@ subsidiesRouter.post('/applications', async (c) => {
       notes
     } = body
     
+    console.log('🔧 Extracted fields from body:', {
+      old_format: { subsidyId, clientId, amountRequested, submissionDeadline },
+      new_format: { subsidy_name, client_id, expected_amount, deadline_date, status },
+      common: { notes }
+    })
+    
     // Use frontend format if available, fallback to old format
     const finalSubsidyName = subsidy_name || subsidyId
     const finalClientId = client_id || clientId
@@ -280,30 +301,37 @@ subsidiesRouter.post('/applications', async (c) => {
     const finalDeadline = deadline_date || submissionDeadline
     const finalStatus = status || 'preparing'
     
-    console.log('Processed fields:', { 
+    console.log('🔧 Processed final fields:', { 
       subsidy_name: finalSubsidyName, 
       client_id: finalClientId, 
       amount: finalAmount,
       deadline: finalDeadline,
-      status: finalStatus
+      status: finalStatus,
+      notes: notes
     })
     
     if (!finalSubsidyName || !finalClientId) {
-      console.log('Missing required fields:', { 
+      console.error('🚫 Missing required fields:', { 
         subsidy_name: finalSubsidyName, 
         client_id: finalClientId 
       })
       return c.json({ error: '助成金名と顧問先は必須です' }, 400)
     }
+    
+    console.log('✅ Required field validation passed')
 
     // Check if subsidy_applications table exists, if not create simple version
+    console.log('🔧 Checking if subsidy_applications table exists...')
+    
     try {
       const tableCheck = await c.env.DB.prepare(`
         SELECT name FROM sqlite_master WHERE type='table' AND name='subsidy_applications'
       `).first()
       
+      console.log('🔧 Table check result:', tableCheck ? 'Table exists' : 'Table not found')
+      
       if (!tableCheck) {
-        console.log('Creating subsidy_applications table...')
+        console.log('🔧 Creating subsidy_applications table...')
         await c.env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS subsidy_applications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -318,20 +346,42 @@ subsidiesRouter.post('/applications', async (c) => {
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
           )
         `).run()
-        console.log('subsidy_applications table created')
+        console.log('✅ subsidy_applications table created successfully')
+      } else {
+        console.log('✅ subsidy_applications table already exists')
       }
     } catch (tableError) {
-      console.error('Error checking/creating table:', tableError)
+      console.error('🚫 Error checking/creating table:', tableError.message, tableError.stack)
+      return c.json({ error: 'Database table error', debug: tableError.message }, 500)
     }
 
     // Insert using simple field structure compatible with frontend
-    const result = await c.env.DB.prepare(`
-      INSERT INTO subsidy_applications 
-      (subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+    console.log('🔧 Preparing INSERT query with values:', {
+      subsidy_name: finalSubsidyName,
+      client_id: finalClientId, 
+      expected_amount: finalAmount,
+      deadline_date: finalDeadline,
+      status: finalStatus,
+      notes: notes,
+      created_by: userId
+    })
+    
+    let result
+    try {
+      result = await c.env.DB.prepare(`
+        INSERT INTO subsidy_applications 
+        (subsidy_name, client_id, expected_amount, deadline_date, status, notes, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(finalSubsidyName, finalClientId, finalAmount, finalDeadline, finalStatus, notes, userId).run()
+      
+      console.log('✅ INSERT successful, result:', result)
+    } catch (insertError) {
+      console.error('🚫 INSERT failed:', insertError.message, insertError.stack)
+      throw insertError
+    }
     
     const applicationId = result.meta.last_row_id
+    console.log('✅ Application created with ID:', applicationId)
 
     // Create default checklist items
     const defaultChecklist = [
@@ -342,28 +392,37 @@ subsidiesRouter.post('/applications', async (c) => {
       { name: '申請書提出', category: '提出', required: true }
     ]
 
+    console.log('🔧 Creating', defaultChecklist.length, 'default checklist items...')
+
     // Create default checklist items (with error handling)
     try {
       for (const [index, item] of defaultChecklist.entries()) {
+        console.log('🔧 Creating checklist item', index + 1, ':', item.name)
         await c.env.DB.prepare(`
           INSERT INTO subsidy_checklists 
           (application_id, item_name, category, is_required, display_order)
           VALUES (?, ?, ?, ?, ?)
         `).bind(applicationId, item.name, item.category, item.required ? 1 : 0, index).run()
       }
-      console.log('Checklist items created successfully')
+      console.log('✅ All checklist items created successfully')
     } catch (checklistError) {
-      console.error('Failed to create checklist items:', checklistError)
+      console.error('🚫 Failed to create checklist items:', checklistError.message)
+      console.log('🔧 Continuing without checklist (table may not exist)')
       // Continue without checklist if table doesn't exist
     }
 
+    console.log('🎉 Application creation completed successfully!')
+    
     return c.json({ 
       success: true,
       id: applicationId,
       message: '助成金申請プロジェクトを作成しました'
     })
   } catch (error) {
-    console.error('Error creating subsidy application:', error)
+    console.error('🚫 Error creating subsidy application:', error.message)
+    console.error('🚫 Full error details:', error)
+    console.error('🚫 Stack trace:', error.stack)
+    
     return c.json({ 
       error: 'Failed to create subsidy application',
       debug: error.message,
