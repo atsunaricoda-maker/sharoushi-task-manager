@@ -33,33 +33,84 @@ subsidiesRouter.get('/test', async (c) => {
   }
 })
 
-// Get subsidy applications
+// Get subsidy applications with JOIN queries for proper data display
 subsidiesRouter.get('/applications', async (c) => {
   try {
-    // Get applications (assuming we'll create a subsidy_applications table)
+    console.log('🔧 PROPER FIX: GET /applications called')
+    
+    // Check authentication
+    const user = c.get('user')
+    if (!user) {
+      return c.json({ error: 'User not authenticated' }, 401)
+    }
+    
+    const userId = parseInt(user.sub)
+    console.log('🔧 User ID:', userId)
+    
+    if (!c.env.DB) {
+      console.error('Database not available')
+      return c.json({ error: 'Database not available' }, 500)
+    }
+    
+    // Check if subsidy_applications table exists
+    const tableCheck = await c.env.DB.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='subsidy_applications'
+    `).first()
+    
+    if (!tableCheck) {
+      console.log('🔧 subsidy_applications table does not exist, returning empty array')
+      return c.json({
+        success: true,
+        applications: [],
+        debug: { message: 'subsidy_applications table not found, returning empty array' }
+      })
+    }
+    
+    console.log('🔧 subsidy_applications table exists')
+    
+    // Get applications with proper JOIN queries for client and subsidy names
     const applications = await c.env.DB.prepare(`
       SELECT 
-        id, 
-        subsidy_name, 
-        client_id, 
-        status, 
-        application_date, 
-        deadline_date, 
-        expected_amount, 
-        notes,
-        created_at
-      FROM subsidy_applications 
-      ORDER BY created_at DESC
-    `).all()
+        sa.id,
+        sa.subsidy_id,
+        sa.client_id, 
+        sa.status, 
+        sa.amount_requested as expected_amount,
+        sa.submission_deadline as deadline_date,
+        sa.notes,
+        sa.created_at,
+        sa.created_by,
+        c.name as client_name,
+        c.company_name,
+        s.name as subsidy_name
+      FROM subsidy_applications sa
+      LEFT JOIN clients c ON sa.client_id = c.id
+      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
+      WHERE sa.created_by = ?
+      ORDER BY sa.created_at DESC
+    `).bind(userId).all()
+    
+    console.log('🔧 Query result:', applications?.results?.length, 'applications found')
     
     return c.json({
       success: true,
-      applications: applications.results || []
+      applications: applications.results || [],
+      debug: {
+        properFix: true,
+        timestamp: new Date().toISOString(),
+        userId: userId,
+        resultCount: applications?.results?.length || 0
+      }
     })
   } catch (error) {
-    console.error('Error fetching applications:', error)
+    console.error('🔧 Error fetching applications:', error)
     return c.json({ 
       error: 'Failed to fetch applications',
+      debug: {
+        properFix: true,
+        error: error.message,
+        stack: error.stack
+      },
       applications: []
     }, 500)
   }
@@ -173,95 +224,7 @@ subsidiesRouter.get('/', async (c) => {
   }
 })
 
-// Get all subsidy applications
-subsidiesRouter.get('/applications', async (c) => {
-  try {
-    // Debug: Check if user exists
-    const user = c.get('user')
-    if (!user) {
-      console.error('No user found in context')
-      return c.json({ error: 'User not authenticated', debug: 'No user in context' }, 401)
-    }
-
-    // Debug: Check if DB exists
-    if (!c.env.DB) {
-      console.error('Database not available')
-      return c.json({ error: 'Database not configured', debug: 'DB binding missing' }, 500)
-    }
-
-    const userId = parseInt(user.sub)
-    if (isNaN(userId)) {
-      console.error('Invalid user ID:', user.sub)
-      return c.json({ error: 'Invalid user ID', debug: `user.sub: ${user.sub}` }, 400)
-    }
-
-    // First, check if tables exist
-    try {
-      const tableCheck = await c.env.DB.prepare(`
-        SELECT name FROM sqlite_master WHERE type='table' AND name='subsidy_applications'
-      `).first()
-      
-      if (!tableCheck) {
-        console.error('subsidy_applications table does not exist')
-        return c.json({ 
-          error: 'Database not initialized', 
-          debug: 'subsidy_applications table missing',
-          success: true,
-          applications: []
-        })
-      }
-    } catch (tableError) {
-      console.error('Error checking table existence:', tableError)
-      return c.json({ 
-        error: 'Database check failed', 
-        debug: tableError.message,
-        success: true,
-        applications: []
-      })
-    }
-
-    // Query with JOIN to get client and subsidy information including progress
-    const result = await c.env.DB.prepare(`
-      SELECT 
-        sa.*,
-        c.name as client_name,
-        s.name as subsidy_name,
-        s.max_amount as subsidy_max_amount,
-        (
-          SELECT COUNT(*) 
-          FROM subsidy_checklists sc 
-          WHERE sc.application_id = sa.id AND sc.is_completed = 1
-        ) as completed_items,
-        (
-          SELECT COUNT(*) 
-          FROM subsidy_checklists sc 
-          WHERE sc.application_id = sa.id
-        ) as total_items
-      FROM subsidy_applications sa
-      LEFT JOIN clients c ON sa.client_id = c.id
-      LEFT JOIN subsidies s ON sa.subsidy_id = s.id
-      WHERE sa.created_by = ?
-      ORDER BY sa.created_at DESC
-    `).bind(userId).all()
-    
-    return c.json({
-      success: true,
-      applications: result.results || [],
-      debug: {
-        userId,
-        tableExists: true,
-        resultCount: result.results?.length || 0
-      }
-    })
-  } catch (error) {
-    console.error('Error fetching subsidy applications:', error)
-    return c.json({ 
-      error: 'Failed to fetch subsidy applications', 
-      debug: error.message,
-      stack: error.stack
-    }, 500)
-  }
-})
+// Removed duplicate emergency fix - using proper implementation above
 
 // Create new subsidy application
 subsidiesRouter.post('/applications', async (c) => {
