@@ -44,8 +44,23 @@ subsidiesRouter.get('/applications', async (c) => {
       return c.json({ error: 'User not authenticated' }, 401)
     }
     
-    const userId = parseInt(user.sub)
-    console.log('🔧 User ID:', userId)
+    // Handle both string and number user IDs from different auth methods
+    let userId
+    if (typeof user.sub === 'string') {
+      userId = parseInt(user.sub)
+    } else if (typeof user.sub === 'number') {
+      userId = user.sub
+    } else {
+      console.error('Invalid user.sub type:', typeof user.sub, user.sub)
+      return c.json({ error: 'Invalid user ID format' }, 400)
+    }
+    
+    if (isNaN(userId)) {
+      console.error('Failed to parse user ID:', user.sub)
+      return c.json({ error: 'Invalid user ID' }, 400)
+    }
+    
+    console.log('🔧 User ID parsed:', userId, 'from user.sub:', user.sub)
     
     if (!c.env.DB) {
       console.error('Database not available')
@@ -187,8 +202,19 @@ subsidiesRouter.post('/applications', async (c) => {
       return c.json({ error: 'User not authenticated' }, 401)
     }
     
-    const userId = parseInt(user.sub)
+    // Handle both string and number user IDs from different auth methods
+    let userId
+    if (typeof user.sub === 'string') {
+      userId = parseInt(user.sub)
+    } else if (typeof user.sub === 'number') {
+      userId = user.sub
+    } else {
+      console.error('Invalid user.sub type in POST:', typeof user.sub, user.sub)
+      return c.json({ error: 'Invalid user ID format' }, 400)
+    }
+    
     if (isNaN(userId)) {
+      console.error('Failed to parse user ID in POST:', user.sub)
       return c.json({ error: 'Invalid user ID' }, 400)
     }
     
