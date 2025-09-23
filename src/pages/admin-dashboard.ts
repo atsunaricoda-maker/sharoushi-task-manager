@@ -240,14 +240,27 @@ export function getAdminDashboardPage(userName: string): string {
             updateDashboard();
             
             // 期間選択の変更イベント
-            document.getElementById('periodSelect').addEventListener('change', (e) => {
-                if (e.target.value === 'custom') {
-                    document.getElementById('customDateRange').classList.remove('hidden');
-                } else {
-                    document.getElementById('customDateRange').classList.add('hidden');
-                    updateDashboard();
-                }
-            });
+            const periodSelect = document.getElementById('periodSelect');
+            if (periodSelect) {
+                console.log('✅ periodSelect found, adding event listener');
+                periodSelect.addEventListener('change', (e) => {
+                    const target = e.target as HTMLSelectElement;
+                    if (target.value === 'custom') {
+                        const customDateRange = document.getElementById('customDateRange');
+                        if (customDateRange) {
+                            customDateRange.classList.remove('hidden');
+                        }
+                    } else {
+                        const customDateRange = document.getElementById('customDateRange');
+                        if (customDateRange) {
+                            customDateRange.classList.add('hidden');
+                        }
+                        updateDashboard();
+                    }
+                });
+            } else {
+                console.error('❌ periodSelect element not found during initialization');
+            }
         });
 
         // ダッシュボード更新
@@ -318,15 +331,25 @@ export function getAdminDashboardPage(userName: string): string {
                 : 0;
             const overdueCount = staffData.reduce((sum, s) => sum + (s.overdue_tasks || 0), 0);
             
-            document.getElementById('totalCompleted').textContent = totalCompleted.toLocaleString();
-            document.getElementById('totalHours').textContent = totalHours.toFixed(1);
-            document.getElementById('avgEfficiency').textContent = avgEfficiency;
-            document.getElementById('overdueCount').textContent = overdueCount;
+            const totalCompletedEl = document.getElementById('totalCompleted');
+            const totalHoursEl = document.getElementById('totalHours');
+            const avgEfficiencyEl = document.getElementById('avgEfficiency');
+            const overdueCountEl = document.getElementById('overdueCount');
+            
+            if (totalCompletedEl) totalCompletedEl.textContent = totalCompleted.toLocaleString();
+            if (totalHoursEl) totalHoursEl.textContent = totalHours.toFixed(1);
+            if (avgEfficiencyEl) avgEfficiencyEl.textContent = avgEfficiency.toString();
+            if (overdueCountEl) overdueCountEl.textContent = overdueCount.toString();
         }
 
         // スタッフテーブル更新
         function updateStaffTable(staffData) {
             const tbody = document.getElementById('staffPerformanceTable');
+            
+            if (!tbody) {
+                console.error('❌ staffPerformanceTable element not found');
+                return;
+            }
             
             tbody.innerHTML = staffData.map(staff => \`
                 <tr>
