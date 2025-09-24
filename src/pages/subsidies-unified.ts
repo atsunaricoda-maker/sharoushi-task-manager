@@ -620,10 +620,10 @@ export function getUnifiedSubsidiesPage(userName: string): string {
         }
 
         function clearSearch() {
-            const element = document.getElementById('searchKeyword');
-            if (element) element.value = '';
-            const element = document.getElementById('searchCategory');
-            if (element) element.value = '';
+            const keywordElement = document.getElementById('searchKeyword');
+            if (keywordElement) keywordElement.value = '';
+            const categoryElement = document.getElementById('searchCategory');
+            if (categoryElement) categoryElement.value = '';
             searchSubsidies();
         }
 
