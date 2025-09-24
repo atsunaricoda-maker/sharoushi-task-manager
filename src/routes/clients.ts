@@ -7,6 +7,43 @@ type Bindings = {
 
 export const clientsRouter = new Hono<{ Bindings: Bindings }>()
 
+// Get all tasks for a specific client
+clientsRouter.get('/:id/tasks', async (c) => {
+  try {
+    const clientId = c.req.param('id')
+    
+    // Get all tasks for this client (including completed ones)
+    const tasks = await c.env.DB.prepare(`
+      SELECT 
+        t.*,
+        u.name as assignee_name
+      FROM tasks t
+      LEFT JOIN users u ON t.assignee_id = u.id
+      WHERE t.client_id = ?
+      ORDER BY 
+        CASE t.status 
+          WHEN 'in_progress' THEN 1
+          WHEN 'pending' THEN 2
+          WHEN 'completed' THEN 3
+          ELSE 4
+        END,
+        t.due_date ASC
+    `).bind(clientId).all()
+    
+    return c.json({
+      success: true,
+      tasks: tasks.results || []
+    })
+  } catch (error) {
+    console.error('Failed to fetch client tasks:', error)
+    return c.json({ 
+      success: false, 
+      error: 'Failed to fetch client tasks',
+      tasks: []
+    }, 500)
+  }
+})
+
 // Get client details with tasks and templates
 clientsRouter.get('/:id', async (c) => {
   try {

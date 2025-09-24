@@ -66,6 +66,37 @@ export function getSimplifiedClientsPage(userName: string): string {
             align-items: center; 
             justify-content: center; 
         }
+        
+        /* Tabs */
+        .tab-button {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .tab-button.active {
+            color: #2563eb;
+            border-bottom-color: #2563eb;
+        }
+        .tab-button:not(.active) {
+            border-bottom: 2px solid transparent;
+        }
+        
+        /* Task Items */
+        .task-item {
+            border-left: 3px solid #6b7280;
+            transition: all 0.2s ease;
+        }
+        .task-item.pending {
+            border-left-color: #f59e0b;
+        }
+        .task-item.in_progress {
+            border-left-color: #3b82f6;
+        }
+        .task-item.completed {
+            border-left-color: #10b981;
+        }
+        .task-item.overdue {
+            border-left-color: #ef4444;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -161,21 +192,49 @@ export function getSimplifiedClientsPage(userName: string): string {
                     </div>
                 </div>
                 
-                <!-- Right Panel: Contact History -->
+                <!-- Right Panel: Tabbed Content -->
                 <div class="w-2/3 p-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-semibold">連絡履歴</h3>
-                        <div class="flex space-x-2">
-                            <button onclick="initializeDatabase()" class="bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700" title="データベーステーブルを初期化">
-                                <i class="fas fa-database mr-1"></i>DB初期化
-                            </button>
-                            <button onclick="openAddContactModal()" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
-                                <i class="fas fa-plus mr-1"></i>連絡記録を追加
-                            </button>
+                    <!-- Tab Headers -->
+                    <div class="flex border-b border-gray-200 mb-4">
+                        <button onclick="switchTab('contacts')" id="contactsTab" class="tab-button px-4 py-2 font-medium text-blue-600 border-b-2 border-blue-600">
+                            <i class="fas fa-comments mr-2"></i>連絡履歴
+                        </button>
+                        <button onclick="switchTab('tasks')" id="tasksTab" class="tab-button px-4 py-2 font-medium text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-tasks mr-2"></i>タスク管理
+                        </button>
+                    </div>
+                    
+                    <!-- Contacts Tab Content -->
+                    <div id="contactsTabContent" class="tab-content">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">連絡履歴</h3>
+                            <div class="flex space-x-2">
+                                <button onclick="initializeDatabase()" class="bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700" title="データベーステーブルを初期化">
+                                    <i class="fas fa-database mr-1"></i>DB初期化
+                                </button>
+                                <button onclick="openAddContactModal()" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
+                                    <i class="fas fa-plus mr-1"></i>連絡記録を追加
+                                </button>
+                            </div>
+                        </div>
+                        <div id="contactHistoryPanel" class="max-h-96 overflow-y-auto">
+                            <!-- Contact history will be loaded here -->
                         </div>
                     </div>
-                    <div id="contactHistoryPanel" class="max-h-96 overflow-y-auto">
-                        <!-- Contact history will be loaded here -->
+                    
+                    <!-- Tasks Tab Content -->
+                    <div id="tasksTabContent" class="tab-content hidden">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">タスク管理</h3>
+                            <div class="flex space-x-2">
+                                <button onclick="openAddTaskModal()" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
+                                    <i class="fas fa-plus mr-1"></i>新しいタスク
+                                </button>
+                            </div>
+                        </div>
+                        <div id="clientTasksPanel" class="max-h-96 overflow-y-auto">
+                            <!-- Client tasks will be loaded here -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -536,9 +595,12 @@ export function getSimplifiedClientsPage(userName: string): string {
                             </div>
                         \` : ''}
                         
-                        <div class="border-t pt-4">
+                        <div class="border-t pt-4 space-y-2">
                             <button onclick="editClient(\${client.id})" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
                                 <i class="fas fa-edit mr-2"></i>編集
+                            </button>
+                            <button onclick="showClientTasks(\${client.id})" class="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                                <i class="fas fa-tasks mr-2"></i>タスク管理
                             </button>
                         </div>
                     </div>
@@ -727,6 +789,192 @@ export function getSimplifiedClientsPage(userName: string): string {
         function editClient(clientId) {
             showToast('編集機能は業務管理画面で利用できます', 'info');
             closeClientDetail();
+        }
+
+        // Tab switching functionality
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active', 'text-blue-600', 'border-blue-600');
+                btn.classList.add('text-gray-500');
+            });
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            // Activate selected tab
+            const selectedTab = document.getElementById(tabName + 'Tab');
+            const selectedContent = document.getElementById(tabName + 'TabContent');
+            
+            if (selectedTab && selectedContent) {
+                selectedTab.classList.add('active', 'text-blue-600', 'border-blue-600');
+                selectedTab.classList.remove('text-gray-500');
+                selectedContent.classList.remove('hidden');
+            }
+            
+            // Load content if needed
+            if (tabName === 'tasks' && currentClientId) {
+                loadClientTasks(currentClientId);
+            }
+        }
+        
+        // Load client tasks
+        async function loadClientTasks(clientId) {
+            try {
+                const response = await axios.get(\`/api/clients/\${clientId}/tasks\`);
+                renderClientTasks(response.data.tasks || []);
+            } catch (error) {
+                console.error('Failed to load client tasks:', error);
+                renderClientTasks([]);
+            }
+        }
+        
+        // Render client tasks
+        function renderClientTasks(tasks) {
+            const panel = document.getElementById('clientTasksPanel');
+            
+            if (tasks.length === 0) {
+                panel.innerHTML = \`
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-tasks text-2xl mb-2"></i>
+                        <p>タスクがありません</p>
+                        <button onclick="openAddTaskModal()" class="mt-2 text-blue-600 hover:text-blue-800">
+                            最初のタスクを追加
+                        </button>
+                    </div>
+                \`;
+                return;
+            }
+            
+            panel.innerHTML = tasks.map(task => {
+                const dueDate = task.due_date ? new Date(task.due_date).toLocaleDateString('ja-JP') : '未設定';
+                const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed';
+                const statusClass = isOverdue ? 'overdue' : task.status;
+                
+                const statusLabels = {
+                    pending: '未開始',
+                    in_progress: '進行中', 
+                    completed: '完了',
+                    overdue: '期限超過'
+                };
+                
+                const priorityLabels = {
+                    urgent: '緊急',
+                    high: '高',
+                    medium: '中',
+                    low: '低'
+                };
+                
+                const priorityColors = {
+                    urgent: 'bg-red-100 text-red-800',
+                    high: 'bg-orange-100 text-orange-800',
+                    medium: 'bg-yellow-100 text-yellow-800', 
+                    low: 'bg-green-100 text-green-800'
+                };
+                
+                return \`
+                    <div class="task-item \${statusClass} bg-white rounded-lg p-4 mb-3 pl-4">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex-1">
+                                <h4 class="font-medium text-gray-900 mb-1">\${task.title}</h4>
+                                \${task.description ? \`<p class="text-sm text-gray-600 mb-2">\${task.description}</p>\` : ''}
+                            </div>
+                            <div class="flex space-x-1 ml-4">
+                                <button onclick="updateTaskProgress(\${task.id}, '\${task.status}')" class="text-blue-600 hover:text-blue-800 text-sm" title="進捗更新">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteTask(\${task.id})" class="text-red-600 hover:text-red-800 text-sm" title="削除">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between text-sm">
+                            <div class="flex space-x-3">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium \${priorityColors[task.priority] || priorityColors.medium}">
+                                    \${priorityLabels[task.priority] || '中'}
+                                </span>
+                                <span class="text-gray-500">期限: \${dueDate}</span>
+                                \${task.progress !== null ? \`<span class="text-gray-500">進捗: \${task.progress}%</span>\` : ''}
+                            </div>
+                            <span class="px-2 py-1 rounded text-xs \${statusClass === 'completed' ? 'bg-green-100 text-green-800' : statusClass === 'overdue' ? 'bg-red-100 text-red-800' : statusClass === 'in_progress' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}">
+                                \${statusLabels[task.status] || task.status}
+                            </span>
+                        </div>
+                    </div>
+                \`;
+            }).join('');
+        }
+        
+        // Update task progress
+        async function updateTaskProgress(taskId, currentStatus) {
+            // Simple progress update - cycle through statuses
+            const statusFlow = {
+                'pending': 'in_progress',
+                'in_progress': 'completed',
+                'completed': 'pending'
+            };
+            
+            const newStatus = statusFlow[currentStatus] || 'in_progress';
+            const newProgress = newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0;
+            
+            try {
+                await axios.put(\`/api/tasks/\${taskId}\`, {
+                    status: newStatus,
+                    progress: newProgress
+                });
+                
+                showToast('タスクの進捗を更新しました', 'success');
+                
+                // Refresh task list
+                if (currentClientId) {
+                    loadClientTasks(currentClientId);
+                }
+                
+                // Also refresh main client grid to update task counts
+                await loadClients();
+                
+            } catch (error) {
+                console.error('Failed to update task:', error);
+                showToast('タスクの更新に失敗しました', 'error');
+            }
+        }
+        
+        // Delete task
+        async function deleteTask(taskId) {
+            if (!confirm('このタスクを削除しますか？')) {
+                return;
+            }
+            
+            try {
+                await axios.delete(\`/api/tasks/\${taskId}\`);
+                showToast('タスクを削除しました', 'success');
+                
+                // Refresh task list
+                if (currentClientId) {
+                    loadClientTasks(currentClientId);
+                }
+                
+                // Also refresh main client grid to update task counts
+                await loadClients();
+                
+            } catch (error) {
+                console.error('Failed to delete task:', error);
+                showToast('タスクの削除に失敗しました', 'error');
+            }
+        }
+        
+        // Open add task modal (placeholder for now)
+        function openAddTaskModal() {
+            showToast('タスク追加機能は準備中です。タスク管理ページをご利用ください。', 'info');
+        }
+        
+        // Show client tasks (called from button)
+        function showClientTasks(clientId) {
+            // Switch to tasks tab when button is clicked
+            switchTab('tasks');
         }
 
         // Auth error handling
