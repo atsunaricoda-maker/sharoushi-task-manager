@@ -114,6 +114,37 @@ export function getTasksPage(user: any) {
             </div>
         </div>
 
+        <!-- Bulk Actions Bar -->
+        <div id="bulkActionsBar" class="bg-white rounded-lg shadow-sm border p-4 mb-4 hidden">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <span id="selectedCount" class="text-sm font-medium text-gray-700">0件選択中</span>
+                    <button onclick="selectAll()" class="text-sm text-blue-600 hover:text-blue-800">すべて選択</button>
+                    <button onclick="clearSelection()" class="text-sm text-gray-600 hover:text-gray-800">選択解除</button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <select id="bulkStatus" class="text-sm rounded-md border-gray-300">
+                        <option value="">ステータス変更</option>
+                        <option value="pending">未着手</option>
+                        <option value="in_progress">進行中</option>
+                        <option value="completed">完了</option>
+                    </select>
+                    <button onclick="applyBulkStatusChange()" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+                        適用
+                    </button>
+                    <select id="bulkAssignee" class="text-sm rounded-md border-gray-300">
+                        <option value="">担当者変更</option>
+                    </select>
+                    <button onclick="applyBulkAssigneeChange()" class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700">
+                        適用
+                    </button>
+                    <button onclick="bulkDelete()" class="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700">
+                        削除
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Task List -->
         <div id="taskList" class="space-y-4">
             <!-- Tasks will be loaded here -->
@@ -249,20 +280,29 @@ export function getTasksPage(user: any) {
             };
 
             taskList.innerHTML = tasks.map(task => \`
-                <div class="task-card bg-white rounded-lg shadow p-4 priority-\${task.priority || 'medium'} cursor-pointer" onclick="showTaskDetail(\${task.id})">
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <h3 class="font-semibold text-lg text-gray-900">\${task.title}</h3>
-                            \${task.description ? \`<p class="text-gray-600 mt-1">\${task.description}</p>\` : ''}
-                            <div class="flex items-center mt-3 text-sm text-gray-500 space-x-4">
-                                <span><i class="fas fa-building mr-1"></i>\${task.client_name || '未割当'}</span>
-                                <span><i class="fas fa-user mr-1"></i>\${task.assignee_name || '未割当'}</span>
-                                <span><i class="fas fa-calendar mr-1"></i>\${task.due_date ? new Date(task.due_date).toLocaleDateString('ja-JP') : '期限なし'}</span>
-                            </div>
+                <div class="task-card bg-white rounded-lg shadow p-4 priority-\${task.priority || 'medium'} relative">
+                    <div class="flex items-start space-x-3">
+                        <div class="flex items-center pt-1">
+                            <input type="checkbox" class="task-checkbox w-4 h-4 text-blue-600 rounded" 
+                                   data-task-id="\${task.id}" onchange="updateBulkSelection()" 
+                                   onclick="event.stopPropagation()">
                         </div>
-                        <div class="flex flex-col items-end space-y-2">
-                            <span class="status-badge status-\${task.status}">\${statusLabels[task.status] || task.status}</span>
-                            <span class="text-xs font-semibold text-gray-600">優先度: \${priorityLabels[task.priority] || task.priority}</span>
+                        <div class="flex-1 cursor-pointer" onclick="showTaskDetail(\${task.id})">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1 pr-4">
+                                    <h3 class="font-semibold text-lg text-gray-900">\${task.title}</h3>
+                                    \${task.description ? \`<p class="text-gray-600 mt-1">\${task.description}</p>\` : ''}
+                                    <div class="flex items-center mt-3 text-sm text-gray-500 space-x-4">
+                                        <span><i class="fas fa-building mr-1"></i>\${task.client_name || '未割当'}</span>
+                                        <span><i class="fas fa-user mr-1"></i>\${task.assignee_name || '未割当'}</span>
+                                        <span><i class="fas fa-calendar mr-1"></i>\${task.due_date ? new Date(task.due_date).toLocaleDateString('ja-JP') : '期限なし'}</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end space-y-2">
+                                    <span class="status-badge status-\${task.status}">\${statusLabels[task.status] || task.status}</span>
+                                    <span class="text-xs font-semibold text-gray-600">優先度: \${priorityLabels[task.priority] || task.priority}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -448,15 +488,108 @@ export function getTasksPage(user: any) {
                 const response = await axios.get('/api/users');
                 const users = response.data.users || response.data;
                 
-                const selects = document.querySelectorAll('select[name="assignee_id"], #filterAssignee');
+                const selects = document.querySelectorAll('select[name="assignee_id"], #filterAssignee, #bulkAssignee');
                 selects.forEach(select => {
                     const currentValue = select.value;
-                    const defaultOption = select.id === 'filterAssignee' ? '<option value="">すべて</option>' : '<option value="">選択してください</option>';
+                    let defaultOption = '<option value="">選択してください</option>';
+                    if (select.id === 'filterAssignee') defaultOption = '<option value="">すべて</option>';
+                    if (select.id === 'bulkAssignee') defaultOption = '<option value="">担当者変更</option>';
                     select.innerHTML = defaultOption + users.map(u => \`<option value="\${u.id}">\${u.name}</option>\`).join('');
                     if (currentValue) select.value = currentValue;
                 });
             } catch (error) {
                 console.error('Failed to load users:', error);
+            }
+        }
+
+        // Bulk Actions Functions
+        let selectedTasks = [];
+
+        function updateBulkSelection() {
+            const checkboxes = document.querySelectorAll('.task-checkbox:checked');
+            selectedTasks = Array.from(checkboxes).map(cb => cb.dataset.taskId);
+            
+            const count = selectedTasks.length;
+            const bulkActionsBar = document.getElementById('bulkActionsBar');
+            const selectedCountElement = document.getElementById('selectedCount');
+            
+            selectedCountElement.textContent = count + '件選択中';
+            
+            if (count > 0) {
+                bulkActionsBar.classList.remove('hidden');
+            } else {
+                bulkActionsBar.classList.add('hidden');
+            }
+        }
+
+        function selectAll() {
+            const checkboxes = document.querySelectorAll('.task-checkbox');
+            checkboxes.forEach(cb => cb.checked = true);
+            updateBulkSelection();
+        }
+
+        function clearSelection() {
+            const checkboxes = document.querySelectorAll('.task-checkbox');
+            checkboxes.forEach(cb => cb.checked = false);
+            updateBulkSelection();
+        }
+
+        async function applyBulkStatusChange() {
+            const newStatus = document.getElementById('bulkStatus').value;
+            if (!newStatus || selectedTasks.length === 0) return;
+
+            if (!confirm(\`選択した\${selectedTasks.length}個のタスクのステータスを「\${newStatus}」に変更しますか？\`)) return;
+
+            try {
+                await Promise.all(selectedTasks.map(taskId => 
+                    axios.put(\`/api/tasks/\${taskId}\`, { status: newStatus })
+                ));
+                
+                clearSelection();
+                await loadTasks();
+                alert('ステータスを一括更新しました');
+            } catch (error) {
+                console.error('Failed to bulk update status:', error);
+                alert('ステータスの一括更新に失敗しました');
+            }
+        }
+
+        async function applyBulkAssigneeChange() {
+            const newAssigneeId = document.getElementById('bulkAssignee').value;
+            if (!newAssigneeId || selectedTasks.length === 0) return;
+
+            if (!confirm(\`選択した\${selectedTasks.length}個のタスクの担当者を変更しますか？\`)) return;
+
+            try {
+                await Promise.all(selectedTasks.map(taskId => 
+                    axios.put(\`/api/tasks/\${taskId}\`, { assignee_id: newAssigneeId })
+                ));
+                
+                clearSelection();
+                await loadTasks();
+                alert('担当者を一括更新しました');
+            } catch (error) {
+                console.error('Failed to bulk update assignee:', error);
+                alert('担当者の一括更新に失敗しました');
+            }
+        }
+
+        async function bulkDelete() {
+            if (selectedTasks.length === 0) return;
+
+            if (!confirm(\`選択した\${selectedTasks.length}個のタスクを削除しますか？この操作は取り消せません。\`)) return;
+
+            try {
+                await Promise.all(selectedTasks.map(taskId => 
+                    axios.delete(\`/api/tasks/\${taskId}\`)
+                ));
+                
+                clearSelection();
+                await loadTasks();
+                alert('タスクを一括削除しました');
+            } catch (error) {
+                console.error('Failed to bulk delete tasks:', error);
+                alert('タスクの一括削除に失敗しました');
             }
         }
 
