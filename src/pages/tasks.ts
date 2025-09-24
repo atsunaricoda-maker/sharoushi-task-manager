@@ -511,6 +511,30 @@ export function getTasksPage(user: any) {
                             <textarea id="taskNotes" rows="3" class="mt-1 w-full rounded-md border-gray-300">\${currentTask.notes || ''}</textarea>
                         </div>
 
+                        <!-- Comments Section -->
+                        <div class="border-t pt-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="text-lg font-medium text-gray-900">コメント</h4>
+                                <span class="text-sm text-gray-500" id="commentCount">0件</span>
+                            </div>
+                            
+                            <!-- Add Comment Form -->
+                            <div class="mb-4">
+                                <textarea id="newCommentText" rows="2" placeholder="コメントを入力..." 
+                                         class="w-full rounded-md border-gray-300 text-sm"></textarea>
+                                <div class="flex justify-end mt-2">
+                                    <button onclick="addComment(\${currentTask.id})" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+                                        <i class="fas fa-paper-plane mr-1"></i>投稿
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Comments List -->
+                            <div id="commentsList" class="space-y-3 max-h-60 overflow-y-auto">
+                                <!-- Comments will be loaded here -->
+                            </div>
+                        </div>
+
                         <div class="flex justify-between pt-4">
                             <div class="space-x-3">
                                 <button onclick="copyTask(\${currentTask.id})" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
@@ -534,6 +558,9 @@ export function getTasksPage(user: any) {
 
                 document.getElementById('taskDetailModal').classList.remove('hidden');
                 document.getElementById('taskDetailModal').classList.add('flex');
+                
+                // Load comments for this task
+                loadTaskComments(currentTask.id);
             } catch (error) {
                 console.error('Failed to load task detail:', error);
                 alert('タスクの詳細を取得できませんでした');
@@ -950,6 +977,95 @@ export function getTasksPage(user: any) {
                 e.target.classList.remove('dragover');
             }
         });
+
+        // Comments Functions
+        function loadTaskComments(taskId) {
+            const comments = getTaskComments(taskId);
+            const commentsList = document.getElementById('commentsList');
+            const commentCount = document.getElementById('commentCount');
+            
+            if (!commentsList || !commentCount) return;
+            
+            commentCount.textContent = comments.length + '件';
+            
+            if (comments.length === 0) {
+                commentsList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">まだコメントがありません</p>';
+                return;
+            }
+            
+            commentsList.innerHTML = comments.map(comment => \`
+                <div class="bg-gray-50 rounded-lg p-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="font-medium text-sm text-gray-900">\${comment.author || 'ユーザー'}</span>
+                        <span class="text-xs text-gray-500">\${formatCommentDate(comment.created_at)}</span>
+                    </div>
+                    <p class="text-sm text-gray-700">\${comment.text}</p>
+                    <div class="flex justify-end mt-2">
+                        <button onclick="deleteComment(\${taskId}, '\${comment.id}')" class="text-xs text-red-500 hover:text-red-700">
+                            <i class="fas fa-trash mr-1"></i>削除
+                        </button>
+                    </div>
+                </div>
+            \`).join('');
+        }
+
+        function getTaskComments(taskId) {
+            const allComments = JSON.parse(localStorage.getItem('taskComments') || '{}');
+            return allComments[taskId] || [];
+        }
+
+        function addComment(taskId) {
+            const commentText = document.getElementById('newCommentText').value.trim();
+            if (!commentText) {
+                alert('コメントを入力してください');
+                return;
+            }
+
+            const newComment = {
+                id: Date.now().toString(),
+                text: commentText,
+                author: 'Current User', // In real app, get from user session
+                created_at: new Date().toISOString()
+            };
+
+            const allComments = JSON.parse(localStorage.getItem('taskComments') || '{}');
+            if (!allComments[taskId]) {
+                allComments[taskId] = [];
+            }
+            allComments[taskId].unshift(newComment); // Add to beginning for newest first
+
+            localStorage.setItem('taskComments', JSON.stringify(allComments));
+            document.getElementById('newCommentText').value = '';
+            
+            loadTaskComments(taskId);
+        }
+
+        function deleteComment(taskId, commentId) {
+            if (!confirm('このコメントを削除しますか？')) return;
+
+            const allComments = JSON.parse(localStorage.getItem('taskComments') || '{}');
+            if (allComments[taskId]) {
+                allComments[taskId] = allComments[taskId].filter(c => c.id !== commentId);
+                localStorage.setItem('taskComments', JSON.stringify(allComments));
+                loadTaskComments(taskId);
+            }
+        }
+
+        function formatCommentDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'たった今';
+            if (diffMins < 60) return \`\${diffMins}分前\`;
+            if (diffHours < 24) return \`\${diffHours}時間前\`;
+            if (diffDays < 7) return \`\${diffDays}日前\`;
+            
+            return date.toLocaleDateString('ja-JP');
+        }
 
         document.getElementById('createTaskForm').addEventListener('submit', async (e) => {
             e.preventDefault();
