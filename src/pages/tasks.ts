@@ -42,6 +42,44 @@ export function getTasksPage(user: any) {
         .priority-medium { border-left: 4px solid #3b82f6; }
         .priority-high { border-left: 4px solid #f59e0b; }
         .priority-urgent { border-left: 4px solid #ef4444; }
+        
+        /* Kanban board styles */
+        .kanban-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: grab;
+            transition: all 0.3s ease;
+        }
+        
+        .kanban-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+        
+        .kanban-card.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+        
+        .kanban-column {
+            min-height: 400px;
+            border: 2px dashed transparent;
+        }
+        
+        .kanban-column.dragover {
+            border-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -76,6 +114,21 @@ export function getTasksPage(user: any) {
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- View Toggle -->
+        <div class="mb-4 flex justify-between items-center">
+            <div class="flex space-x-2">
+                <button id="listViewBtn" onclick="switchView('list')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    <i class="fas fa-list mr-2"></i>リスト表示
+                </button>
+                <button id="kanbanViewBtn" onclick="switchView('kanban')" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    <i class="fas fa-columns mr-2"></i>カンバン表示
+                </button>
+            </div>
+            <button onclick="openCreateModal()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                <i class="fas fa-plus mr-2"></i>新規タスク
+            </button>
+        </div>
+        
         <!-- Filters -->
         <div class="bg-white rounded-lg shadow mb-6 p-4">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -110,6 +163,27 @@ export function getTasksPage(user: any) {
                     <select id="filterAssignee" onchange="loadTasks()" class="w-full rounded-md border-gray-300">
                         <option value="">すべて</option>
                     </select>
+                </div>
+            </div>
+            
+            <!-- Saved Filters -->
+            <div class="mt-4 flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <button onclick="saveCurrentFilter()" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+                        <i class="fas fa-save mr-1"></i>フィルター保存
+                    </button>
+                    <button onclick="clearAllFilters()" class="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600">
+                        <i class="fas fa-refresh mr-1"></i>クリア
+                    </button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">保存済み:</label>
+                    <select id="savedFilters" onchange="applySavedFilter()" class="text-sm rounded-md border-gray-300">
+                        <option value="">フィルターを選択</option>
+                    </select>
+                    <button onclick="deleteSavedFilter()" class="px-2 py-1 text-sm text-red-600 hover:text-red-800" title="選択中のフィルターを削除">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -148,6 +222,42 @@ export function getTasksPage(user: any) {
         <!-- Task List -->
         <div id="taskList" class="space-y-4">
             <!-- Tasks will be loaded here -->
+        </div>
+
+        <!-- Kanban Board -->
+        <div id="kanbanBoard" class="hidden">
+            <div class="grid grid-cols-3 gap-6">
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h3 class="font-semibold text-gray-700 mb-4 flex items-center">
+                        <i class="fas fa-clock mr-2 text-gray-600"></i>未着手
+                    </h3>
+                    <div id="pendingColumn" class="space-y-3 min-h-[400px]" 
+                         ondrop="drop(event, 'pending')" 
+                         ondragover="allowDrop(event)">
+                        <!-- Pending tasks -->
+                    </div>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-4">
+                    <h3 class="font-semibold text-blue-700 mb-4 flex items-center">
+                        <i class="fas fa-play mr-2 text-blue-600"></i>進行中
+                    </h3>
+                    <div id="in_progressColumn" class="space-y-3 min-h-[400px]" 
+                         ondrop="drop(event, 'in_progress')" 
+                         ondragover="allowDrop(event)">
+                        <!-- In progress tasks -->
+                    </div>
+                </div>
+                <div class="bg-green-50 rounded-lg p-4">
+                    <h3 class="font-semibold text-green-700 mb-4 flex items-center">
+                        <i class="fas fa-check mr-2 text-green-600"></i>完了
+                    </h3>
+                    <div id="completedColumn" class="space-y-3 min-h-[400px]" 
+                         ondrop="drop(event, 'completed')" 
+                         ondragover="allowDrop(event)">
+                        <!-- Completed tasks -->
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -234,6 +344,7 @@ export function getTasksPage(user: any) {
             await loadTasks();
             await loadClients();
             await loadUsers();
+            loadSavedFilters(); // Load saved filter presets
         }
 
         async function loadTasks() {
@@ -258,6 +369,11 @@ export function getTasksPage(user: any) {
         }
 
         function displayTasks(tasks) {
+            if (currentView === 'kanban') {
+                displayKanbanTasks(tasks);
+                return;
+            }
+
             const taskList = document.getElementById('taskList');
             
             if (!tasks || tasks.length === 0) {
@@ -301,6 +417,11 @@ export function getTasksPage(user: any) {
                                 <div class="flex flex-col items-end space-y-2">
                                     <span class="status-badge status-\${task.status}">\${statusLabels[task.status] || task.status}</span>
                                     <span class="text-xs font-semibold text-gray-600">優先度: \${priorityLabels[task.priority] || task.priority}</span>
+                                    <div class="flex space-x-1 mt-2">
+                                        <button onclick="event.stopPropagation(); copyTask(\${task.id})" class="text-green-600 hover:text-green-800 text-sm p-1 rounded" title="コピー">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -391,9 +512,14 @@ export function getTasksPage(user: any) {
                         </div>
 
                         <div class="flex justify-between pt-4">
-                            <button onclick="deleteTask(\${currentTask.id})" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
-                                <i class="fas fa-trash mr-2"></i>削除
-                            </button>
+                            <div class="space-x-3">
+                                <button onclick="copyTask(\${currentTask.id})" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                                    <i class="fas fa-copy mr-2"></i>コピー
+                                </button>
+                                <button onclick="deleteTask(\${currentTask.id})" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+                                    <i class="fas fa-trash mr-2"></i>削除
+                                </button>
+                            </div>
                             <div class="space-x-3">
                                 <button onclick="closeDetailModal()" class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
                                     キャンセル
@@ -592,6 +718,238 @@ export function getTasksPage(user: any) {
                 alert('タスクの一括削除に失敗しました');
             }
         }
+
+        // Task Copy Function
+        async function copyTask(taskId) {
+            try {
+                const response = await axios.get(\`/api/tasks/\${taskId}\`);
+                const originalTask = response.data;
+                
+                // Create new task with similar data but modified title
+                const newTaskData = {
+                    title: \`【コピー】\${originalTask.title}\`,
+                    description: originalTask.description || '',
+                    client_id: originalTask.client_id || '',
+                    assignee_id: originalTask.assignee_id || '',
+                    priority: originalTask.priority || 'medium',
+                    due_date: '', // Clear due date for new task
+                    status: 'pending' // Reset status to pending
+                };
+
+                await axios.post('/api/tasks', newTaskData);
+                closeDetailModal();
+                await loadTasks();
+                alert('タスクをコピーしました');
+            } catch (error) {
+                console.error('Failed to copy task:', error);
+                alert('タスクのコピーに失敗しました');
+            }
+        }
+
+        // Filter Save/Load Functions
+        function saveCurrentFilter() {
+            const filterName = prompt('フィルター名を入力してください:');
+            if (!filterName) return;
+
+            const currentFilter = {
+                name: filterName,
+                status: document.getElementById('filterStatus').value,
+                priority: document.getElementById('filterPriority').value,
+                client_id: document.getElementById('filterClient').value,
+                assignee_id: document.getElementById('filterAssignee').value
+            };
+
+            let savedFilters = JSON.parse(localStorage.getItem('taskFilters') || '[]');
+            
+            // Check if filter name already exists
+            const existingIndex = savedFilters.findIndex(f => f.name === filterName);
+            if (existingIndex >= 0) {
+                if (!confirm(\`フィルター「\${filterName}」は既に存在します。上書きしますか？\`)) {
+                    return;
+                }
+                savedFilters[existingIndex] = currentFilter;
+            } else {
+                savedFilters.push(currentFilter);
+            }
+
+            localStorage.setItem('taskFilters', JSON.stringify(savedFilters));
+            loadSavedFilters();
+            alert(\`フィルター「\${filterName}」を保存しました\`);
+        }
+
+        function loadSavedFilters() {
+            const savedFilters = JSON.parse(localStorage.getItem('taskFilters') || '[]');
+            const select = document.getElementById('savedFilters');
+            
+            select.innerHTML = '<option value="">フィルターを選択</option>' + 
+                savedFilters.map(filter => \`<option value="\${filter.name}">\${filter.name}</option>\`).join('');
+        }
+
+        function applySavedFilter() {
+            const filterName = document.getElementById('savedFilters').value;
+            if (!filterName) return;
+
+            const savedFilters = JSON.parse(localStorage.getItem('taskFilters') || '[]');
+            const filter = savedFilters.find(f => f.name === filterName);
+            
+            if (filter) {
+                document.getElementById('filterStatus').value = filter.status || '';
+                document.getElementById('filterPriority').value = filter.priority || '';
+                document.getElementById('filterClient').value = filter.client_id || '';
+                document.getElementById('filterAssignee').value = filter.assignee_id || '';
+                
+                loadTasks(); // Apply the filter
+            }
+        }
+
+        function clearAllFilters() {
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterPriority').value = '';
+            document.getElementById('filterClient').value = '';
+            document.getElementById('filterAssignee').value = '';
+            document.getElementById('savedFilters').value = '';
+            
+            loadTasks(); // Reload without filters
+        }
+
+        function deleteSavedFilter() {
+            const filterName = document.getElementById('savedFilters').value;
+            if (!filterName) return;
+
+            if (!confirm(\`フィルター「\${filterName}」を削除しますか？\`)) return;
+
+            let savedFilters = JSON.parse(localStorage.getItem('taskFilters') || '[]');
+            savedFilters = savedFilters.filter(f => f.name !== filterName);
+            
+            localStorage.setItem('taskFilters', JSON.stringify(savedFilters));
+            loadSavedFilters();
+            alert(\`フィルター「\${filterName}」を削除しました\`);
+        }
+
+        // Kanban Board Functions
+        let currentView = 'list';
+
+        function switchView(view) {
+            currentView = view;
+            const listBtn = document.getElementById('listViewBtn');
+            const kanbanBtn = document.getElementById('kanbanViewBtn');
+            const taskList = document.getElementById('taskList');
+            const kanbanBoard = document.getElementById('kanbanBoard');
+            const bulkActionsBar = document.getElementById('bulkActionsBar');
+
+            if (view === 'kanban') {
+                // Switch to kanban view
+                listBtn.className = 'px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50';
+                kanbanBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700';
+                taskList.classList.add('hidden');
+                kanbanBoard.classList.remove('hidden');
+                bulkActionsBar.classList.add('hidden'); // Hide bulk actions in kanban view
+                displayKanbanTasks(allTasks);
+            } else {
+                // Switch to list view
+                listBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700';
+                kanbanBtn.className = 'px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50';
+                taskList.classList.remove('hidden');
+                kanbanBoard.classList.add('hidden');
+                displayTasks(allTasks);
+            }
+        }
+
+        function displayKanbanTasks(tasks) {
+            const statusColumns = {
+                pending: document.getElementById('pendingColumn'),
+                in_progress: document.getElementById('in_progressColumn'), 
+                completed: document.getElementById('completedColumn')
+            };
+
+            // Clear all columns
+            Object.values(statusColumns).forEach(column => {
+                column.innerHTML = '';
+            });
+
+            const priorityLabels = {
+                urgent: '緊急',
+                high: '高',
+                medium: '中',
+                low: '低'
+            };
+
+            tasks.forEach(task => {
+                const column = statusColumns[task.status];
+                if (column) {
+                    const taskCard = document.createElement('div');
+                    taskCard.className = \`kanban-card priority-\${task.priority || 'medium'}\`;
+                    taskCard.draggable = true;
+                    taskCard.dataset.taskId = task.id;
+                    taskCard.ondragstart = (e) => drag(e);
+                    taskCard.onclick = () => showTaskDetail(task.id);
+
+                    taskCard.innerHTML = \`
+                        <div class="mb-2">
+                            <h4 class="font-medium text-sm text-gray-900 line-clamp-2">\${task.title}</h4>
+                            \${task.description ? \`<p class="text-xs text-gray-600 mt-1 line-clamp-2">\${task.description}</p>\` : ''}
+                        </div>
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-gray-500">
+                                <i class="fas fa-user mr-1"></i>\${task.assignee_name || '未割当'}
+                            </span>
+                            <span class="px-2 py-1 rounded text-xs font-medium priority-\${task.priority}">
+                                \${priorityLabels[task.priority] || task.priority}
+                            </span>
+                        </div>
+                        \${task.due_date ? \`
+                            <div class="mt-2 text-xs text-gray-500">
+                                <i class="fas fa-calendar mr-1"></i>\${new Date(task.due_date).toLocaleDateString('ja-JP')}
+                            </div>
+                        \` : ''}
+                    \`;
+
+                    column.appendChild(taskCard);
+                }
+            });
+        }
+
+        // Drag and Drop Functions
+        function allowDrop(ev) {
+            ev.preventDefault();
+            ev.currentTarget.classList.add('dragover');
+        }
+
+        function drag(ev) {
+            ev.dataTransfer.setData("text", ev.target.dataset.taskId);
+            ev.target.classList.add('dragging');
+        }
+
+        async function drop(ev, newStatus) {
+            ev.preventDefault();
+            ev.currentTarget.classList.remove('dragover');
+            
+            const taskId = ev.dataTransfer.getData("text");
+            const draggedElement = document.querySelector(\`[data-task-id="\${taskId}"]\`);
+            
+            if (draggedElement) {
+                draggedElement.classList.remove('dragging');
+                
+                try {
+                    await axios.put(\`/api/tasks/\${taskId}\`, { 
+                        status: newStatus,
+                        progress: newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0
+                    });
+                    
+                    await loadTasks(); // Refresh the data
+                } catch (error) {
+                    console.error('Failed to update task status:', error);
+                    alert('タスクの更新に失敗しました');
+                }
+            }
+        }
+
+        // Handle drag leave to remove dragover styling
+        document.addEventListener('dragleave', (e) => {
+            if (e.target.classList.contains('kanban-column')) {
+                e.target.classList.remove('dragover');
+            }
+        });
 
         document.getElementById('createTaskForm').addEventListener('submit', async (e) => {
             e.preventDefault();
