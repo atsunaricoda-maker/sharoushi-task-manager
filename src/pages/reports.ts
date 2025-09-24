@@ -238,7 +238,8 @@ export function getReportsPage(userName: string): string {
         // Initialize
         async function init() {
             // Set default month
-            document.getElementById('reportMonth').value = new Date().toISOString().slice(0, 7);
+            const element = document.getElementById('reportMonth');
+            if (element) element.value = new Date().toISOString().slice(0, 7);
             
             // Load clients for selector
             await loadClients();

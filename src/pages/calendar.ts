@@ -359,7 +359,8 @@ export function getCalendarPage(userName: string): string {
                     alert('イベントを追加しました');
                     closeQuickAddModal();
                     calendar.refetchEvents();
-                    document.getElementById('quickAddText').value = '';
+                    const element = document.getElementById('quickAddText');
+            if (element) element.value = '';
                 } catch (error) {
                     console.error('Failed to quick add:', error);
                     alert('追加に失敗しました: ' + (error.response?.data?.message || error.message));
@@ -424,8 +425,10 @@ export function getCalendarPage(userName: string): string {
                     const endDate = new Date(date);
                     endDate.setHours(endDate.getHours() + 1);
                     
-                    document.getElementById('eventStart').value = formatDateTimeLocal(startDate);
-                    document.getElementById('eventEnd').value = formatDateTimeLocal(endDate);
+                    const element = document.getElementById('eventStart');
+            if (element) element.value = formatDateTimeLocal(startDate);
+                    const element = document.getElementById('eventEnd');
+            if (element) element.value = formatDateTimeLocal(endDate);
                 }
                 
                 document.getElementById('eventModal').classList.remove('hidden');
@@ -447,18 +450,23 @@ export function getCalendarPage(userName: string): string {
                     document.getElementById('deleteEventBtn').classList.remove('hidden');
                     
                     // フォームに既存データを入力
-                    document.getElementById('eventTitle').value = event.title || '';
-                    document.getElementById('eventDescription').value = event.description || '';
-                    document.getElementById('eventLocation').value = event.location || '';
+                    const element = document.getElementById('eventTitle');
+            if (element) element.value = event.title || '';
+                    const element = document.getElementById('eventDescription');
+            if (element) element.value = event.description || '';
+                    const element = document.getElementById('eventLocation');
+            if (element) element.value = event.location || '';
                     
                     // 日時の設定
                     if (event.start_datetime) {
                         const startDate = new Date(event.start_datetime);
-                        document.getElementById('eventStart').value = formatDateTimeLocal(startDate);
+                        const element = document.getElementById('eventStart');
+            if (element) element.value = formatDateTimeLocal(startDate);
                     }
                     if (event.end_datetime) {
                         const endDate = new Date(event.end_datetime);
-                        document.getElementById('eventEnd').value = formatDateTimeLocal(endDate);
+                        const element = document.getElementById('eventEnd');
+            if (element) element.value = formatDateTimeLocal(endDate);
                     }
                     
                     // 現在編集中のイベントIDを保存

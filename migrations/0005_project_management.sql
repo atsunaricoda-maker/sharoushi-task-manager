@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS projects (
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
--- タスクテーブルにプロジェクトID列を追加（既に存在する場合はスキップ）
--- ALTER TABLE tasks ADD COLUMN project_id INTEGER REFERENCES projects(id); -- ALREADY EXISTS
+-- タスクテーブルにプロジェクトID列を追加
+ALTER TABLE tasks ADD COLUMN project_id INTEGER REFERENCES projects(id);
 
 -- プロジェクトメンバーテーブル
 CREATE TABLE IF NOT EXISTS project_members (
@@ -114,9 +114,9 @@ CREATE TABLE IF NOT EXISTS task_attachments (
   FOREIGN KEY (uploaded_by) REFERENCES users(id)
 );
 
--- クライアントテーブルにDrive情報追加（既存のカラムがない場合）
--- ALTER TABLE clients ADD COLUMN drive_folder_id TEXT; -- ALREADY EXISTS
--- ALTER TABLE clients ADD COLUMN drive_subfolders TEXT; -- ALREADY EXISTS
+-- クライアントテーブルにDrive情報追加
+ALTER TABLE clients ADD COLUMN drive_folder_id TEXT;
+ALTER TABLE clients ADD COLUMN drive_subfolders TEXT;
 
 -- インデックス追加
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);

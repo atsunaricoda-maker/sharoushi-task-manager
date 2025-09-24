@@ -345,7 +345,8 @@ export function getSettingsPage(userName: string): string {
                 document.getElementById('email-daily').checked = settings.daily_summary;
                 document.getElementById('email-weekly').checked = settings.weekly_report;
                 document.getElementById('browser-notification').checked = settings.browser;
-                document.getElementById('reminder-days').value = settings.reminderDays || 3;
+                const element = document.getElementById('reminder-days');
+            if (element) element.value = settings.reminderDays || 3;
             } catch (error) {
                 console.error('Failed to load settings:', error);
             }

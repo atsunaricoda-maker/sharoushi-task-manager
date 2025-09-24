@@ -1724,6 +1724,37 @@ app.get('/', async (c) => {
             align-items: center;
             justify-content: center;
         }
+        
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            min-width: 300px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .toast.success {
+            background-color: #10b981;
+        }
+        
+        .toast.error {
+            background-color: #ef4444;
+        }
+        
+        .toast.info {
+            background-color: #3b82f6;
+        }
+        
+        .toast.warning {
+            background-color: #f59e0b;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -2132,31 +2163,119 @@ app.get('/', async (c) => {
                     low: '低'
                 };
                 
+                const statusLabels = {
+                    pending: '未開始',
+                    in_progress: '進行中',
+                    completed: '完了'
+                };
+                
+                const statusColors = {
+                    pending: 'bg-gray-100 text-gray-800',
+                    in_progress: 'bg-blue-100 text-blue-800', 
+                    completed: 'bg-green-100 text-green-800'
+                };
+                
                 return \`
                     <div class="border rounded-lg p-4 hover:shadow-md transition-shadow priority-\${task.priority}">
                         <div class="flex justify-between items-start">
                             <div class="flex-1">
                                 <h3 class="font-medium text-gray-900">\${task.title}</h3>
+                                \${task.description ? \`<p class="text-sm text-gray-600 mt-1">\${task.description}</p>\` : ''}
                                 <div class="flex items-center mt-2 text-sm text-gray-600">
                                     <i class="fas fa-building mr-1"></i>
                                     <span class="mr-3">\${task.client_name || '-'}</span>
                                     <i class="fas fa-user mr-1"></i>
                                     <span>\${task.assignee_name || '-'}</span>
                                 </div>
+                                <div class="flex items-center mt-2 space-x-3">
+                                    <span class="px-2 py-1 text-xs font-medium rounded \${statusColors[task.status]}">
+                                        \${statusLabels[task.status] || task.status}
+                                    </span>
+                                    \${task.progress !== null ? \`<span class="text-xs text-gray-500">進捗: \${task.progress}%</span>\` : ''}
+                                </div>
                             </div>
-                            <div class="flex flex-col items-end">
+                            <div class="flex flex-col items-end space-y-2">
                                 <span class="px-2 py-1 text-xs font-medium rounded-full \${priorityColors[task.priority]}">
                                     \${priorityLabels[task.priority]}
                                 </span>
-                                <span class="text-sm text-gray-600 mt-2">
+                                <span class="text-sm text-gray-600">
                                     <i class="fas fa-calendar mr-1"></i>
                                     \${task.due_date ? new Date(task.due_date).toLocaleDateString('ja-JP') : '期限なし'}
                                 </span>
+                                <div class="flex space-x-1">
+                                    <button onclick="quickUpdateTaskStatus(\${task.id}, '\${task.status}')" class="text-blue-600 hover:text-blue-800 text-sm p-1" title="進捗更新">
+                                        <i class="fas fa-arrow-right"></i>
+                                    </button>
+                                    <button onclick="quickEditTask(\${task.id})" class="text-green-600 hover:text-green-800 text-sm p-1" title="編集">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 \`;
             }).join('');
+        }
+        
+        // Quick task status update from dashboard
+        async function quickUpdateTaskStatus(taskId, currentStatus) {
+            // Simple progress update - cycle through statuses
+            const statusFlow = {
+                'pending': 'in_progress',
+                'in_progress': 'completed',
+                'completed': 'pending'
+            };
+            
+            const newStatus = statusFlow[currentStatus] || 'in_progress';
+            const newProgress = newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0;
+            
+            try {
+                await axios.put(`/api/tasks/${taskId}`, {
+                    status: newStatus,
+                    progress: newProgress
+                });
+                
+                showToast('タスクの進捗を更新しました', 'success');
+                
+                // Refresh dashboard data
+                await loadDashboard();
+                
+            } catch (error) {
+                console.error('Failed to update task:', error);
+                showToast('タスクの更新に失敗しました', 'error');
+            }
+        }
+        
+        // Quick task edit from dashboard (redirect to task management)
+        function quickEditTask(taskId) {
+            // Store the task ID to highlight after navigation
+            sessionStorage.setItem('editTaskId', taskId);
+            // Navigate to task management page
+            window.location.href = '/tasks';
+        }
+        
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span>${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            // Add to page
+            document.body.appendChild(toast);
+            
+            // Auto remove
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.remove();
+                }
+            }, duration);
         }
         
         function drawWorkloadChart(workloadData) {
@@ -2305,6 +2424,48 @@ app.get('/', async (c) => {
                     </div>
                 \`;
             }
+        }
+        
+        // Quick task status update for dashboard
+        async function quickUpdateTaskStatus(taskId, currentStatus) {
+            const statusFlow = {
+                'pending': 'in_progress',
+                'in_progress': 'completed',
+                'completed': 'pending'
+            };
+            
+            const newStatus = statusFlow[currentStatus] || 'in_progress';
+            const newProgress = newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0;
+            
+            try {
+                await axios.put(\`/api/tasks/\${taskId}\`, {
+                    status: newStatus,
+                    progress: newProgress
+                });
+                
+                // Refresh dashboard
+                await loadDashboard();
+                
+                // Show quick feedback
+                const button = event.target.closest('button');
+                if (button) {
+                    const originalContent = button.innerHTML;
+                    button.innerHTML = '<i class="fas fa-check text-green-600"></i>';
+                    setTimeout(() => {
+                        button.innerHTML = originalContent;
+                    }, 1000);
+                }
+                
+            } catch (error) {
+                console.error('Failed to update task status:', error);
+                alert('タスクの更新に失敗しました');
+            }
+        }
+        
+        // Quick task edit for dashboard
+        function quickEditTask(taskId) {
+            // Redirect to task management page with specific task selected
+            window.location.href = \`/tasks?edit=\${taskId}\`;
         }
         
         // Set default month (with null check)

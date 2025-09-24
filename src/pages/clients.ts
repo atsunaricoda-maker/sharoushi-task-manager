@@ -467,9 +467,12 @@ export function getClientsPage(userName: string): string {
         
         // Clear all filters
         function clearFilters() {
-            document.getElementById('searchInput').value = '';
-            document.getElementById('contractPlanFilter').value = '';
-            document.getElementById('employeeCountFilter').value = '';
+            const element = document.getElementById('searchInput');
+            if (element) element.value = '';
+            const element = document.getElementById('contractPlanFilter');
+            if (element) element.value = '';
+            const element = document.getElementById('employeeCountFilter');
+            if (element) element.value = '';
             filteredClients = [...allClients];
             updateStats();
             renderClientsTable();
@@ -634,15 +637,25 @@ export function getClientsPage(userName: string): string {
                 const client = res.data.client;
                 
                 // Populate the form with existing data
-                document.querySelector('input[name="name"]').value = client.name || '';
-                document.querySelector('input[name="company_name"]').value = client.company_name || '';
-                document.querySelector('input[name="email"]').value = client.email || '';
-                document.querySelector('input[name="phone"]').value = client.phone || '';
-                document.querySelector('input[name="address"]').value = client.address || '';
-                document.querySelector('input[name="employee_count"]').value = client.employee_count || '';
-                document.querySelector('input[name="monthly_fee"]').value = client.monthly_fee || '';
-                document.querySelector('select[name="contract_plan"]').value = client.contract_plan || '';
-                document.querySelector('textarea[name="notes"]').value = client.notes || '';
+                const nameInput = document.querySelector('input[name="name"]');
+                const companyNameInput = document.querySelector('input[name="company_name"]');
+                const emailInput = document.querySelector('input[name="email"]');
+                const phoneInput = document.querySelector('input[name="phone"]');
+                const addressInput = document.querySelector('input[name="address"]');
+                const employeeCountInput = document.querySelector('input[name="employee_count"]');
+                const monthlyFeeInput = document.querySelector('input[name="monthly_fee"]');
+                const contractPlanSelect = document.querySelector('select[name="contract_plan"]');
+                const notesTextarea = document.querySelector('textarea[name="notes"]');
+                
+                if (nameInput) nameInput.value = client.name || '';
+                if (companyNameInput) companyNameInput.value = client.company_name || '';
+                if (emailInput) emailInput.value = client.email || '';
+                if (phoneInput) phoneInput.value = client.phone || '';
+                if (addressInput) addressInput.value = client.address || '';
+                if (employeeCountInput) employeeCountInput.value = client.employee_count || '';
+                if (monthlyFeeInput) monthlyFeeInput.value = client.monthly_fee || '';
+                if (contractPlanSelect) contractPlanSelect.value = client.contract_plan || '';
+                if (notesTextarea) notesTextarea.value = client.notes || '';
                 
                 // Change form submission behavior for editing
                 const form = document.getElementById('newClientForm');

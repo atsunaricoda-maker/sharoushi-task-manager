@@ -948,10 +948,14 @@ export function getSubsidiesPage(userName: string): string {
             
             // フィルタークリア
             function clearSearchFilters() {
-                document.getElementById('keywordFilter').value = '';
-                document.getElementById('categoryFilter').value = '';
-                document.getElementById('minAmountFilter').value = '';
-                document.getElementById('clientFilterForSearch').value = '';
+                const element = document.getElementById('keywordFilter');
+            if (element) element.value = '';
+                const element = document.getElementById('categoryFilter');
+            if (element) element.value = '';
+                const element = document.getElementById('minAmountFilter');
+            if (element) element.value = '';
+                const element = document.getElementById('clientFilterForSearch');
+            if (element) element.value = '';
                 searchSubsidies();
             }
             
@@ -1193,7 +1197,8 @@ export function getSubsidiesPage(userName: string): string {
             }
             
             function selectSubsidyForApplication(subsidyId) {
-                document.getElementById('subsidySelect').value = subsidyId;
+                const element = document.getElementById('subsidySelect');
+            if (element) element.value = subsidyId;
                 showNewApplicationModal();
                 switchTab('applications');
             }
