@@ -18,40 +18,17 @@ CREATE TABLE IF NOT EXISTS subsidies (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 助成金申請プロジェクト
-CREATE TABLE IF NOT EXISTS subsidy_applications (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  subsidy_id INTEGER NOT NULL,
-  client_id INTEGER NOT NULL,
-  project_id INTEGER, -- 関連プロジェクト
-  status TEXT NOT NULL DEFAULT 'planning' CHECK(status IN (
-    'planning',        -- 計画中
-    'preparing',       -- 準備中
-    'document_check',  -- 書類確認中
-    'submitted',       -- 申請済み
-    'under_review',    -- 審査中
-    'approved',        -- 承認
-    'rejected',        -- 却下
-    'received',        -- 受給済み
-    'cancelled'        -- 取り下げ
-  )),
-  application_number TEXT, -- 申請番号
-  application_date DATE,
-  approval_date DATE,
-  amount_requested INTEGER, -- 申請金額
-  amount_approved INTEGER, -- 承認金額
-  amount_received INTEGER, -- 受給金額
-  submission_deadline DATE,
-  notes TEXT,
-  rejection_reason TEXT,
-  created_by INTEGER,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (subsidy_id) REFERENCES subsidies(id),
-  FOREIGN KEY (client_id) REFERENCES clients(id),
-  FOREIGN KEY (project_id) REFERENCES projects(id),
-  FOREIGN KEY (created_by) REFERENCES users(id)
-);
+-- 既存の subsidy_applications テーブルに不足しているカラムを追加
+ALTER TABLE subsidy_applications ADD COLUMN subsidy_id INTEGER;
+ALTER TABLE subsidy_applications ADD COLUMN project_id INTEGER;
+ALTER TABLE subsidy_applications ADD COLUMN application_number TEXT;
+ALTER TABLE subsidy_applications ADD COLUMN approval_date DATE;
+ALTER TABLE subsidy_applications ADD COLUMN amount_requested INTEGER;
+ALTER TABLE subsidy_applications ADD COLUMN amount_approved INTEGER;
+ALTER TABLE subsidy_applications ADD COLUMN amount_received INTEGER;
+ALTER TABLE subsidy_applications ADD COLUMN submission_deadline DATE;
+ALTER TABLE subsidy_applications ADD COLUMN rejection_reason TEXT;
+ALTER TABLE subsidy_applications ADD COLUMN created_by INTEGER;
 
 -- 申請書類管理
 CREATE TABLE IF NOT EXISTS subsidy_documents (
@@ -166,6 +143,7 @@ CREATE TABLE IF NOT EXISTS subsidy_updates (
 CREATE INDEX IF NOT EXISTS idx_subsidy_applications_client_id ON subsidy_applications(client_id);
 CREATE INDEX IF NOT EXISTS idx_subsidy_applications_status ON subsidy_applications(status);
 CREATE INDEX IF NOT EXISTS idx_subsidy_applications_submission_deadline ON subsidy_applications(submission_deadline);
+CREATE INDEX IF NOT EXISTS idx_subsidy_applications_subsidy_id ON subsidy_applications(subsidy_id);
 CREATE INDEX IF NOT EXISTS idx_subsidy_documents_application_id ON subsidy_documents(application_id);
 CREATE INDEX IF NOT EXISTS idx_subsidy_checklists_application_id ON subsidy_checklists(application_id);
 CREATE INDEX IF NOT EXISTS idx_subsidy_schedules_application_id ON subsidy_schedules(application_id);

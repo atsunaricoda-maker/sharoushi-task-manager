@@ -691,7 +691,8 @@ export function getSimplifiedClientsPage(userName: string): string {
 
         function openAddContactModal() {
             if (!currentClientId) return;
-            document.getElementById('contactClientId').value = currentClientId;
+            const element = document.getElementById('contactClientId');
+            if (element) element.value = currentClientId;
             document.getElementById('addContactModal').classList.add('active');
         }
 
