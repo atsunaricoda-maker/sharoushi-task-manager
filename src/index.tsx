@@ -348,6 +348,7 @@ app.route('/api/calendar', scheduleRouter) // Alias for calendar functionality
 
 // Simplified auth middleware - only for core functions
 app.use('/api/tasks/*', checkAuth)
+app.use('/api/comments/*', checkAuth)
 app.use('/api/clients/*', checkAuth)
 app.use('/api/contacts/*', checkAuth)
 app.use('/api/users/*', checkAuth)
@@ -1361,6 +1362,88 @@ app.post('/api/ai/enhance-description', async (c) => {
   }
 })
 
+// Task Comments API
+app.get('/api/tasks/:id/comments', async (c) => {
+  try {
+    const taskId = c.req.param('id')
+    const result = await c.env.DB.prepare(`
+      SELECT 
+        tc.*,
+        u.name as author_name,
+        u.email as author_email
+      FROM task_comments tc
+      LEFT JOIN users u ON tc.user_id = u.id
+      WHERE tc.task_id = ?
+      ORDER BY tc.created_at DESC
+    `).bind(taskId).all()
+    
+    return c.json({ 
+      success: true,
+      comments: result.results || []
+    })
+  } catch (error) {
+    console.error('Failed to fetch comments:', error)
+    return c.json({ error: 'Failed to fetch comments' }, 500)
+  }
+})
+
+app.post('/api/tasks/:id/comments', async (c) => {
+  try {
+    const taskId = c.req.param('id')
+    const body = await c.req.json()
+    const { comment_text } = body
+    const user = c.get('user')
+    
+    if (!comment_text || comment_text.trim().length === 0) {
+      return c.json({ error: 'Comment text is required' }, 400)
+    }
+    
+    const result = await c.env.DB.prepare(`
+      INSERT INTO task_comments (task_id, user_id, comment_text)
+      VALUES (?, ?, ?)
+    `).bind(taskId, parseInt(user.sub), comment_text.trim()).run()
+    
+    return c.json({ 
+      success: true,
+      id: result.meta.last_row_id,
+      message: 'コメントを追加しました'
+    })
+  } catch (error) {
+    console.error('Failed to create comment:', error)
+    return c.json({ error: 'Failed to create comment' }, 500)
+  }
+})
+
+app.delete('/api/comments/:id', async (c) => {
+  try {
+    const commentId = c.req.param('id')
+    const user = c.get('user')
+    
+    // Check if comment exists and user owns it (or is admin)
+    const comment = await c.env.DB.prepare(`
+      SELECT user_id FROM task_comments WHERE id = ?
+    `).bind(commentId).first()
+    
+    if (!comment) {
+      return c.json({ error: 'Comment not found' }, 404)
+    }
+    
+    if (comment.user_id !== parseInt(user.sub) && user.role !== 'admin') {
+      return c.json({ error: 'Not authorized to delete this comment' }, 403)
+    }
+    
+    await c.env.DB.prepare('DELETE FROM task_comments WHERE id = ?').bind(commentId).run()
+    
+    return c.json({ 
+      success: true,
+      message: 'コメントを削除しました'
+    })
+  } catch (error) {
+    console.error('Failed to delete comment:', error)
+    return c.json({ error: 'Failed to delete comment' }, 500)
+  }
+})
+
 // Existing API routes (Tasks, Clients, Users, Dashboard)
 app.get('/api/tasks', async (c) => {
   try {
@@ -1452,35 +1535,62 @@ app.put('/api/tasks/:id', async (c) => {
   try {
     const id = c.req.param('id')
     const body = await c.req.json()
-    const { status, progress, actual_hours, notes } = body
+    
+    // Support both partial and full updates
+    const { 
+      title, description, client_id, assignee_id, task_type,
+      status, priority, progress, actual_hours, 
+      due_date, estimated_hours, notes 
+    } = body
 
     const currentTask = await c.env.DB.prepare('SELECT status FROM tasks WHERE id = ?').bind(id).first()
     
-    // Set completed_at if task is being completed
-    const completedAt = (status === 'completed' && currentTask?.status !== 'completed') 
-      ? `, completed_at = CURRENT_TIMESTAMP` 
-      : ''
+    if (!currentTask) {
+      return c.json({ error: 'Task not found' }, 404)
+    }
     
-    await c.env.DB.prepare(`
-      UPDATE tasks 
-      SET status = ?, progress = ?, actual_hours = ?, notes = ?, updated_at = CURRENT_TIMESTAMP${completedAt}
-      WHERE id = ?
-    `).bind(status, progress, actual_hours, notes, id).run()
-
-    // Task history tracking - temporarily disabled until needed
-    // if (currentTask && currentTask.status !== status) {
-    //   const user = c.get('user')
-    //   await c.env.DB.prepare(`
-    //     INSERT INTO task_history (task_id, user_id, action, old_status, new_status)
-    //     VALUES (?, ?, 'updated', ?, ?)
-    //   `).bind(id, parseInt(user.sub), currentTask.status, status).run()
-    // }
+    // Build dynamic update query
+    const updates = []
+    const params = []
+    
+    if (title !== undefined) { updates.push('title = ?'); params.push(title) }
+    if (description !== undefined) { updates.push('description = ?'); params.push(description) }
+    if (client_id !== undefined) { updates.push('client_id = ?'); params.push(client_id || null) }
+    if (assignee_id !== undefined) { updates.push('assignee_id = ?'); params.push(assignee_id || null) }
+    if (task_type !== undefined) { updates.push('task_type = ?'); params.push(task_type) }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status) }
+    if (priority !== undefined) { updates.push('priority = ?'); params.push(priority) }
+    if (progress !== undefined) { updates.push('progress = ?'); params.push(progress) }
+    if (actual_hours !== undefined) { updates.push('actual_hours = ?'); params.push(actual_hours) }
+    if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date || null) }
+    if (estimated_hours !== undefined) { updates.push('estimated_hours = ?'); params.push(estimated_hours) }
+    if (notes !== undefined) { updates.push('notes = ?'); params.push(notes) }
+    
+    // Always update timestamp
+    updates.push('updated_at = CURRENT_TIMESTAMP')
+    
+    // Set completed_at if task is being completed
+    if (status === 'completed' && currentTask.status !== 'completed') {
+      updates.push('completed_at = CURRENT_TIMESTAMP')
+    } else if (status && status !== 'completed' && currentTask.status === 'completed') {
+      updates.push('completed_at = NULL')
+    }
+    
+    if (updates.length === 1) { // Only timestamp update
+      return c.json({ error: 'No fields to update' }, 400)
+    }
+    
+    const query = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`
+    params.push(id)
+    
+    await c.env.DB.prepare(query).bind(...params).run()
 
     return c.json({ 
       success: true,
       message: 'タスクを更新しました'
     })
   } catch (error) {
+    console.error('Task update error:', error)
     return c.json({ error: 'Failed to update task' }, 500)
   }
 })
@@ -1496,6 +1606,80 @@ app.delete('/api/tasks/:id', async (c) => {
     })
   } catch (error) {
     return c.json({ error: 'Failed to delete task' }, 500)
+  }
+})
+
+// Bulk operations API
+app.patch('/api/tasks/bulk', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { task_ids, updates } = body
+    
+    if (!task_ids || !Array.isArray(task_ids) || task_ids.length === 0) {
+      return c.json({ error: 'Invalid task_ids provided' }, 400)
+    }
+    
+    if (!updates || Object.keys(updates).length === 0) {
+      return c.json({ error: 'No updates provided' }, 400)
+    }
+    
+    // Build update query
+    const updateFields = []
+    const params = []
+    
+    if (updates.status !== undefined) { updateFields.push('status = ?'); params.push(updates.status) }
+    if (updates.assignee_id !== undefined) { updateFields.push('assignee_id = ?'); params.push(updates.assignee_id || null) }
+    if (updates.priority !== undefined) { updateFields.push('priority = ?'); params.push(updates.priority) }
+    if (updates.progress !== undefined) { updateFields.push('progress = ?'); params.push(updates.progress) }
+    
+    updateFields.push('updated_at = CURRENT_TIMESTAMP')
+    
+    // Handle completed_at for status changes
+    if (updates.status === 'completed') {
+      updateFields.push('completed_at = CURRENT_TIMESTAMP')
+    } else if (updates.status && updates.status !== 'completed') {
+      updateFields.push('completed_at = NULL')
+    }
+    
+    const placeholders = task_ids.map(() => '?').join(',')
+    const query = `UPDATE tasks SET ${updateFields.join(', ')} WHERE id IN (${placeholders})`
+    
+    await c.env.DB.prepare(query).bind(...params, ...task_ids).run()
+    
+    return c.json({ 
+      success: true,
+      updated_count: task_ids.length,
+      message: `${task_ids.length}個のタスクを一括更新しました`
+    })
+  } catch (error) {
+    console.error('Bulk update error:', error)
+    return c.json({ error: 'Failed to perform bulk update' }, 500)
+  }
+})
+
+// Bulk delete API
+app.delete('/api/tasks/bulk', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { task_ids } = body
+    
+    if (!task_ids || !Array.isArray(task_ids) || task_ids.length === 0) {
+      return c.json({ error: 'Invalid task_ids provided' }, 400)
+    }
+    
+    const placeholders = task_ids.map(() => '?').join(',')
+    const query = `DELETE FROM tasks WHERE id IN (${placeholders})`
+    
+    await c.env.DB.prepare(query).bind(...task_ids).run()
+    
+    return c.json({ 
+      success: true,
+      deleted_count: task_ids.length,
+      message: `${task_ids.length}個のタスクを一括削除しました`
+    })
+  } catch (error) {
+    console.error('Bulk delete error:', error)
+    return c.json({ error: 'Failed to perform bulk delete' }, 500)
   }
 })
 

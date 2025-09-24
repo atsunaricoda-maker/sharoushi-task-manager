@@ -694,9 +694,10 @@ export function getTasksPage(user: any) {
             if (!confirm(\`選択した\${selectedTasks.length}個のタスクのステータスを「\${newStatus}」に変更しますか？\`)) return;
 
             try {
-                await Promise.all(selectedTasks.map(taskId => 
-                    axios.put(\`/api/tasks/\${taskId}\`, { status: newStatus })
-                ));
+                await axios.patch('/api/tasks/bulk', {
+                    task_ids: selectedTasks,
+                    updates: { status: newStatus }
+                });
                 
                 clearSelection();
                 await loadTasks();
@@ -714,9 +715,10 @@ export function getTasksPage(user: any) {
             if (!confirm(\`選択した\${selectedTasks.length}個のタスクの担当者を変更しますか？\`)) return;
 
             try {
-                await Promise.all(selectedTasks.map(taskId => 
-                    axios.put(\`/api/tasks/\${taskId}\`, { assignee_id: newAssigneeId })
-                ));
+                await axios.patch('/api/tasks/bulk', {
+                    task_ids: selectedTasks,
+                    updates: { assignee_id: newAssigneeId }
+                });
                 
                 clearSelection();
                 await loadTasks();
@@ -733,9 +735,9 @@ export function getTasksPage(user: any) {
             if (!confirm(\`選択した\${selectedTasks.length}個のタスクを削除しますか？この操作は取り消せません。\`)) return;
 
             try {
-                await Promise.all(selectedTasks.map(taskId => 
-                    axios.delete(\`/api/tasks/\${taskId}\`)
-                ));
+                await axios.delete('/api/tasks/bulk', {
+                    data: { task_ids: selectedTasks }
+                });
                 
                 clearSelection();
                 await loadTasks();
@@ -978,76 +980,90 @@ export function getTasksPage(user: any) {
             }
         });
 
-        // Comments Functions
-        function loadTaskComments(taskId) {
-            const comments = getTaskComments(taskId);
-            const commentsList = document.getElementById('commentsList');
-            const commentCount = document.getElementById('commentCount');
-            
-            if (!commentsList || !commentCount) return;
-            
-            commentCount.textContent = comments.length + '件';
-            
-            if (comments.length === 0) {
-                commentsList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">まだコメントがありません</p>';
-                return;
+        // Comments Functions - Database powered
+        async function loadTaskComments(taskId) {
+            try {
+                const response = await axios.get(\`/api/tasks/\${taskId}/comments\`);
+                const comments = response.data.comments || [];
+                const commentsList = document.getElementById('commentsList');
+                const commentCount = document.getElementById('commentCount');
+                
+                if (!commentsList || !commentCount) return;
+                
+                commentCount.textContent = comments.length + '件';
+                
+                if (comments.length === 0) {
+                    commentsList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">まだコメントがありません</p>';
+                    return;
+                }
+                
+                commentsList.innerHTML = comments.map(comment => \`
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-medium text-sm text-gray-900">\${comment.author_name || 'ユーザー'}</span>
+                            <span class="text-xs text-gray-500">\${formatCommentDate(comment.created_at)}</span>
+                        </div>
+                        <p class="text-sm text-gray-700">\${comment.comment_text}</p>
+                        <div class="flex justify-end mt-2">
+                            <button onclick="deleteComment(\${comment.id})" class="text-xs text-red-500 hover:text-red-700">
+                                <i class="fas fa-trash mr-1"></i>削除
+                            </button>
+                        </div>
+                    </div>
+                \`).join('');
+            } catch (error) {
+                console.error('Failed to load comments:', error);
+                const commentsList = document.getElementById('commentsList');
+                if (commentsList) {
+                    commentsList.innerHTML = '<p class="text-red-500 text-sm text-center py-4">コメントの読み込みに失敗しました</p>';
+                }
             }
-            
-            commentsList.innerHTML = comments.map(comment => \`
-                <div class="bg-gray-50 rounded-lg p-3">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="font-medium text-sm text-gray-900">\${comment.author || 'ユーザー'}</span>
-                        <span class="text-xs text-gray-500">\${formatCommentDate(comment.created_at)}</span>
-                    </div>
-                    <p class="text-sm text-gray-700">\${comment.text}</p>
-                    <div class="flex justify-end mt-2">
-                        <button onclick="deleteComment(\${taskId}, '\${comment.id}')" class="text-xs text-red-500 hover:text-red-700">
-                            <i class="fas fa-trash mr-1"></i>削除
-                        </button>
-                    </div>
-                </div>
-            \`).join('');
         }
 
-        function getTaskComments(taskId) {
-            const allComments = JSON.parse(localStorage.getItem('taskComments') || '{}');
-            return allComments[taskId] || [];
-        }
-
-        function addComment(taskId) {
+        async function addComment(taskId) {
             const commentText = document.getElementById('newCommentText').value.trim();
             if (!commentText) {
                 alert('コメントを入力してください');
                 return;
             }
 
-            const newComment = {
-                id: Date.now().toString(),
-                text: commentText,
-                author: 'Current User', // In real app, get from user session
-                created_at: new Date().toISOString()
-            };
-
-            const allComments = JSON.parse(localStorage.getItem('taskComments') || '{}');
-            if (!allComments[taskId]) {
-                allComments[taskId] = [];
+            try {
+                await axios.post(\`/api/tasks/\${taskId}/comments\`, {
+                    comment_text: commentText
+                });
+                
+                document.getElementById('newCommentText').value = '';
+                await loadTaskComments(taskId);
+                
+                // Show success message
+                const button = document.querySelector(\`button[onclick="addComment(\${taskId})"]\`);
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check mr-1"></i>投稿済み';
+                button.disabled = true;
+                
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }, 2000);
+            } catch (error) {
+                console.error('Failed to add comment:', error);
+                alert('コメントの投稿に失敗しました');
             }
-            allComments[taskId].unshift(newComment); // Add to beginning for newest first
-
-            localStorage.setItem('taskComments', JSON.stringify(allComments));
-            document.getElementById('newCommentText').value = '';
-            
-            loadTaskComments(taskId);
         }
 
-        function deleteComment(taskId, commentId) {
+        async function deleteComment(commentId) {
             if (!confirm('このコメントを削除しますか？')) return;
 
-            const allComments = JSON.parse(localStorage.getItem('taskComments') || '{}');
-            if (allComments[taskId]) {
-                allComments[taskId] = allComments[taskId].filter(c => c.id !== commentId);
-                localStorage.setItem('taskComments', JSON.stringify(allComments));
-                loadTaskComments(taskId);
+            try {
+                await axios.delete(\`/api/comments/\${commentId}\`);
+                
+                // Reload comments for current task
+                if (currentTask) {
+                    await loadTaskComments(currentTask.id);
+                }
+            } catch (error) {
+                console.error('Failed to delete comment:', error);
+                alert('コメントの削除に失敗しました');
             }
         }
 
