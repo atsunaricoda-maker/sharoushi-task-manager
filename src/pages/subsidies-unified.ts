@@ -620,8 +620,10 @@ export function getUnifiedSubsidiesPage(userName: string): string {
         }
 
         function clearSearch() {
-            document.getElementById('searchKeyword').value = '';
-            document.getElementById('searchCategory').value = '';
+            const element = document.getElementById('searchKeyword');
+            if (element) element.value = '';
+            const element = document.getElementById('searchCategory');
+            if (element) element.value = '';
             searchSubsidies();
         }
 
@@ -639,7 +641,10 @@ export function getUnifiedSubsidiesPage(userName: string): string {
         function createApplicationFromSubsidy(subsidyId) {
             const subsidy = subsidies.find(s => s.id === subsidyId);
             if (subsidy) {
-                document.querySelector('input[name="subsidy_name"]').value = subsidy.name;
+                const subsidyNameInput = document.querySelector('input[name="subsidy_name"]');
+                if (subsidyNameInput) {
+                    subsidyNameInput.value = subsidy.name;
+                }
                 openNewApplicationModal();
             }
         }

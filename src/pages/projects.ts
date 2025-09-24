@@ -555,8 +555,10 @@ export function getProjectsPage(userName: string): string {
             }
             
             function showProgressModal(taskId, projectId) {
-                document.getElementById('progressTaskId').value = taskId;
-                document.getElementById('progressProjectId').value = projectId;
+                const element = document.getElementById('progressTaskId');
+            if (element) element.value = taskId;
+                const element = document.getElementById('progressProjectId');
+            if (element) element.value = projectId;
                 document.getElementById('progressModal').classList.remove('hidden');
             }
             

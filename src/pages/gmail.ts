@@ -438,8 +438,10 @@ export function getGmailPage(userName: string): string {
                 };
                 
                 if (templates[templateType]) {
-                    document.getElementById('emailSubject').value = templates[templateType].subject;
-                    document.getElementById('emailBody').value = templates[templateType].body;
+                    const element = document.getElementById('emailSubject');
+            if (element) element.value = templates[templateType].subject;
+                    const element = document.getElementById('emailBody');
+            if (element) element.value = templates[templateType].body;
                 }
             }
             
@@ -451,10 +453,14 @@ export function getGmailPage(userName: string): string {
             
             // 作成フォームクリア
             function clearCompose() {
-                document.getElementById('emailTo').value = '';
-                document.getElementById('emailCc').value = '';
-                document.getElementById('emailSubject').value = '';
-                document.getElementById('emailBody').value = '';
+                const element = document.getElementById('emailTo');
+            if (element) element.value = '';
+                const element = document.getElementById('emailCc');
+            if (element) element.value = '';
+                const element = document.getElementById('emailSubject');
+            if (element) element.value = '';
+                const element = document.getElementById('emailBody');
+            if (element) element.value = '';
             }
             
             // ユーティリティ関数

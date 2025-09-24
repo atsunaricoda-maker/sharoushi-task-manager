@@ -1197,17 +1197,15 @@ export function getBusinessManagementPage(user: any) {
 
         function selectCalendarDate(dateString) {
             const selectedDate = dayjs(dateString);
-            
             const startTimeInput = document.querySelector('#createScheduleModal input[name="start_time"]');
             const endTimeInput = document.querySelector('#createScheduleModal input[name="end_time"]');
             
-            if (!startTimeInput || !endTimeInput) {
-                console.error('Schedule modal inputs not found');
-                return;
+            if (startTimeInput) {
+                startTimeInput.value = selectedDate.format('YYYY-MM-DDTHH:mm');
             }
-            
-            startTimeInput.value = selectedDate.format('YYYY-MM-DDTHH:mm');
-            endTimeInput.value = selectedDate.add(1, 'hour').format('YYYY-MM-DDTHH:mm');
+            if (endTimeInput) {
+                endTimeInput.value = selectedDate.add(1, 'hour').format('YYYY-MM-DDTHH:mm');
+            }
             openCreateScheduleModal();
         }
 

@@ -493,8 +493,15 @@ export function getSchedulePage(userName: string, userRole: string): string {
         // Select date (for creating new events)
         function selectDate(dateString) {
             const selectedDate = dayjs(dateString);
-            document.querySelector('input[name="start_time"]').value = selectedDate.format('YYYY-MM-DDTHH:mm');
-            document.querySelector('input[name="end_time"]').value = selectedDate.add(1, 'hour').format('YYYY-MM-DDTHH:mm');
+            const startTimeInput = document.querySelector('input[name="start_time"]');
+            const endTimeInput = document.querySelector('input[name="end_time"]');
+            
+            if (startTimeInput) {
+                startTimeInput.value = selectedDate.format('YYYY-MM-DDTHH:mm');
+            }
+            if (endTimeInput) {
+                endTimeInput.value = selectedDate.add(1, 'hour').format('YYYY-MM-DDTHH:mm');
+            }
             openNewEventModal();
         }
 
