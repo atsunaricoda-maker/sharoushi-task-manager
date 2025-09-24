@@ -2419,10 +2419,10 @@ app.get('/', async (c) => {
                 };
                 
                 return \`
-                    <div class="border rounded-lg p-4 hover:shadow-md transition-shadow priority-\${task.priority}">
+                    <div class="border rounded-lg p-4 hover:shadow-lg hover:border-blue-300 transition-all duration-200 priority-\${task.priority} cursor-pointer" onclick="viewTaskDetail(\${task.id})" title="クリックで詳細表示">
                         <div class="flex justify-between items-start">
                             <div class="flex-1">
-                                <h3 class="font-medium text-gray-900">\${task.title}</h3>
+                                <h3 class="font-medium text-gray-900 hover:text-blue-600 transition-colors">\${task.title}</h3>
                                 \${task.description ? \`<p class="text-sm text-gray-600 mt-1">\${task.description}</p>\` : ''}
                                 <div class="flex items-center mt-2 text-sm text-gray-600">
                                     <i class="fas fa-building mr-1"></i>
@@ -2446,10 +2446,10 @@ app.get('/', async (c) => {
                                     \${task.due_date ? new Date(task.due_date).toLocaleDateString('ja-JP') : '期限なし'}
                                 </span>
                                 <div class="flex space-x-1">
-                                    <button onclick="quickUpdateTaskStatus(\${task.id}, '\${task.status}')" class="text-blue-600 hover:text-blue-800 text-sm p-1" title="進捗更新">
+                                    <button onclick="event.stopPropagation(); quickUpdateTaskStatus(\${task.id}, '\${task.status}')" class="text-blue-600 hover:text-blue-800 text-sm p-1" title="進捗更新">
                                         <i class="fas fa-arrow-right"></i>
                                     </button>
-                                    <button onclick="quickEditTask(\${task.id})" class="text-green-600 hover:text-green-800 text-sm p-1" title="編集">
+                                    <button onclick="event.stopPropagation(); quickEditTask(\${task.id})" class="text-green-600 hover:text-green-800 text-sm p-1" title="編集">
                                         <i class="fas fa-edit"></i>
                                     </button>
                                 </div>
@@ -2493,6 +2493,14 @@ app.get('/', async (c) => {
         function quickEditTask(taskId) {
             // Store the task ID to highlight after navigation
             sessionStorage.setItem('editTaskId', taskId);
+            // Navigate to task management page
+            window.location.href = '/tasks';
+        }
+        
+        // View task detail from dashboard (redirect to task management with detail view)
+        function viewTaskDetail(taskId) {
+            // Store the task ID to show detail after navigation
+            sessionStorage.setItem('viewTaskDetailId', taskId);
             // Navigate to task management page
             window.location.href = '/tasks';
         }

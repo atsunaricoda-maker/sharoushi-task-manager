@@ -345,6 +345,26 @@ export function getTasksPage(user: any) {
             await loadClients();
             await loadUsers();
             loadSavedFilters(); // Load saved filter presets
+            
+            // Check if we need to show task detail from dashboard navigation
+            const viewTaskDetailId = sessionStorage.getItem('viewTaskDetailId');
+            if (viewTaskDetailId) {
+                sessionStorage.removeItem('viewTaskDetailId');
+                // Wait a bit for the page to fully load, then show detail
+                setTimeout(() => {
+                    showTaskDetail(parseInt(viewTaskDetailId));
+                }, 500);
+            }
+            
+            // Keep existing edit task functionality
+            const editTaskId = sessionStorage.getItem('editTaskId');
+            if (editTaskId) {
+                sessionStorage.removeItem('editTaskId');
+                // Wait a bit for the page to fully load, then show detail for editing
+                setTimeout(() => {
+                    showTaskDetail(parseInt(editTaskId));
+                }, 500);
+            }
         }
 
         async function loadTasks() {
