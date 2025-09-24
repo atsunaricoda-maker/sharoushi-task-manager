@@ -2230,7 +2230,7 @@ app.get('/', async (c) => {
             const newProgress = newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0;
             
             try {
-                await axios.put(`/api/tasks/${taskId}`, {
+                await axios.put('/api/tasks/' + taskId, {
                     status: newStatus,
                     progress: newProgress
                 });
@@ -2257,15 +2257,14 @@ app.get('/', async (c) => {
         // Toast notification system
         function showToast(message, type = 'info', duration = 3000) {
             const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `
-                <div class="flex items-center justify-between">
-                    <span>${message}</span>
-                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            `;
+            toast.className = 'toast ' + type;
+            toast.innerHTML = 
+                '<div class="flex items-center justify-between">' +
+                    '<span>' + message + '</span>' +
+                    '<button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">' +
+                        '<i class="fas fa-times"></i>' +
+                    '</button>' +
+                '</div>';
             
             // Add to page
             document.body.appendChild(toast);
