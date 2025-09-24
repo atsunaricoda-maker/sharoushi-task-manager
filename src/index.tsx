@@ -2669,46 +2669,7 @@ app.get('/', async (c) => {
         }
         
         // Quick task status update for dashboard
-        async function quickUpdateTaskStatus(taskId, currentStatus) {
-            const statusFlow = {
-                'pending': 'in_progress',
-                'in_progress': 'completed',
-                'completed': 'pending'
-            };
-            
-            const newStatus = statusFlow[currentStatus] || 'in_progress';
-            const newProgress = newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0;
-            
-            try {
-                await axios.put(\`/api/tasks/\${taskId}\`, {
-                    status: newStatus,
-                    progress: newProgress
-                });
-                
-                // Refresh dashboard
-                await loadDashboard();
-                
-                // Show quick feedback
-                const button = event.target.closest('button');
-                if (button) {
-                    const originalContent = button.innerHTML;
-                    button.innerHTML = '<i class="fas fa-check text-green-600"></i>';
-                    setTimeout(() => {
-                        button.innerHTML = originalContent;
-                    }, 1000);
-                }
-                
-            } catch (error) {
-                console.error('Failed to update task status:', error);
-                alert('タスクの更新に失敗しました');
-            }
-        }
-        
-        // Quick task edit for dashboard
-        function quickEditTask(taskId) {
-            // Redirect to task management page with specific task selected
-            window.location.href = \`/tasks?edit=\${taskId}\`;
-        }
+
         
         // Set default month (with null check)
         const aiMonthSelectEl = document.getElementById('aiMonthSelect');
