@@ -1452,36 +1452,70 @@ app.put('/api/tasks/:id', async (c) => {
   try {
     const id = c.req.param('id')
     const body = await c.req.json()
-    const { status, progress, actual_hours, notes } = body
+    
+    // Support ALL task fields for complete updates
+    const { 
+      title, description, client_id, assignee_id, task_type,
+      status, priority, progress, actual_hours, 
+      due_date, estimated_hours, notes 
+    } = body
 
+    // Get current task for status tracking
     const currentTask = await c.env.DB.prepare('SELECT status FROM tasks WHERE id = ?').bind(id).first()
     
-    // Set completed_at if task is being completed
-    const completedAt = (status === 'completed' && currentTask?.status !== 'completed') 
-      ? `, completed_at = CURRENT_TIMESTAMP` 
-      : ''
+    if (!currentTask) {
+      return c.json({ error: 'Task not found' }, 404)
+    }
     
-    await c.env.DB.prepare(`
-      UPDATE tasks 
-      SET status = ?, progress = ?, actual_hours = ?, notes = ?, updated_at = CURRENT_TIMESTAMP${completedAt}
-      WHERE id = ?
-    `).bind(status, progress, actual_hours, notes, id).run()
-
-    // Task history tracking - temporarily disabled until needed
-    // if (currentTask && currentTask.status !== status) {
-    //   const user = c.get('user')
-    //   await c.env.DB.prepare(`
-    //     INSERT INTO task_history (task_id, user_id, action, old_status, new_status)
-    //     VALUES (?, ?, 'updated', ?, ?)
-    //   `).bind(id, parseInt(user.sub), currentTask.status, status).run()
-    // }
+    // Build dynamic update query based on provided fields
+    const updates = []
+    const params = []
+    
+    if (title !== undefined) { updates.push('title = ?'); params.push(title) }
+    if (description !== undefined) { updates.push('description = ?'); params.push(description) }
+    if (client_id !== undefined) { updates.push('client_id = ?'); params.push(client_id) }
+    if (assignee_id !== undefined) { updates.push('assignee_id = ?'); params.push(assignee_id) }
+    if (task_type !== undefined) { updates.push('task_type = ?'); params.push(task_type) }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status) }
+    if (priority !== undefined) { updates.push('priority = ?'); params.push(priority) }
+    if (progress !== undefined) { updates.push('progress = ?'); params.push(progress) }
+    if (actual_hours !== undefined) { updates.push('actual_hours = ?'); params.push(actual_hours) }
+    if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date) }
+    if (estimated_hours !== undefined) { updates.push('estimated_hours = ?'); params.push(estimated_hours) }
+    if (notes !== undefined) { updates.push('notes = ?'); params.push(notes) }
+    
+    // Always update timestamp
+    updates.push('updated_at = CURRENT_TIMESTAMP')
+    
+    // Set completed_at if task is being completed
+    if (status === 'completed' && currentTask?.status !== 'completed') {
+      updates.push('completed_at = CURRENT_TIMESTAMP')
+    }
+    
+    if (updates.length === 1) { // Only updated_at
+      return c.json({ 
+        success: true,
+        message: 'No changes to update'
+      })
+    }
+    
+    // Add ID parameter for WHERE clause
+    params.push(id)
+    
+    const updateQuery = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`
+    
+    await c.env.DB.prepare(updateQuery).bind(...params).run()
 
     return c.json({ 
       success: true,
       message: 'タスクを更新しました'
     })
   } catch (error) {
-    return c.json({ error: 'Failed to update task' }, 500)
+    console.error('Task update error:', error)
+    return c.json({ 
+      error: 'Failed to update task',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
   }
 })
 
@@ -1496,6 +1530,215 @@ app.delete('/api/tasks/:id', async (c) => {
     })
   } catch (error) {
     return c.json({ error: 'Failed to delete task' }, 500)
+  }
+})
+
+// Bulk operations for efficient task management
+app.patch('/api/tasks/bulk', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { task_ids, updates } = body
+    
+    if (!task_ids || !Array.isArray(task_ids) || task_ids.length === 0) {
+      return c.json({ error: 'task_ids array is required' }, 400)
+    }
+    
+    if (!updates || typeof updates !== 'object') {
+      return c.json({ error: 'updates object is required' }, 400)
+    }
+    
+    // Build dynamic update query
+    const updateFields = []
+    const params = []
+    
+    if (updates.status !== undefined) { updateFields.push('status = ?'); params.push(updates.status) }
+    if (updates.priority !== undefined) { updateFields.push('priority = ?'); params.push(updates.priority) }
+    if (updates.assignee_id !== undefined) { updateFields.push('assignee_id = ?'); params.push(updates.assignee_id) }
+    if (updates.client_id !== undefined) { updateFields.push('client_id = ?'); params.push(updates.client_id) }
+    if (updates.progress !== undefined) { updateFields.push('progress = ?'); params.push(updates.progress) }
+    
+    // Always update timestamp
+    updateFields.push('updated_at = CURRENT_TIMESTAMP')
+    
+    // Set completed_at for completed tasks
+    if (updates.status === 'completed') {
+      updateFields.push('completed_at = CURRENT_TIMESTAMP')
+    }
+    
+    if (updateFields.length === 1) { // Only updated_at
+      return c.json({ error: 'No valid update fields provided' }, 400)
+    }
+    
+    // Create placeholders for task IDs
+    const placeholders = task_ids.map(() => '?').join(', ')
+    const updateQuery = `
+      UPDATE tasks 
+      SET ${updateFields.join(', ')} 
+      WHERE id IN (${placeholders})
+    `
+    
+    // Combine update params with task IDs
+    const allParams = [...params, ...task_ids]
+    
+    const result = await c.env.DB.prepare(updateQuery).bind(...allParams).run()
+    
+    return c.json({ 
+      success: true,
+      updated_count: result.changes,
+      message: `${result.changes}件のタスクを更新しました`
+    })
+  } catch (error) {
+    console.error('Bulk update error:', error)
+    return c.json({ 
+      error: 'Failed to bulk update tasks',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
+app.delete('/api/tasks/bulk', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { task_ids } = body
+    
+    if (!task_ids || !Array.isArray(task_ids) || task_ids.length === 0) {
+      return c.json({ error: 'task_ids array is required' }, 400)
+    }
+    
+    // Create placeholders for task IDs  
+    const placeholders = task_ids.map(() => '?').join(', ')
+    const deleteQuery = `DELETE FROM tasks WHERE id IN (${placeholders})`
+    
+    const result = await c.env.DB.prepare(deleteQuery).bind(...task_ids).run()
+    
+    return c.json({ 
+      success: true,
+      deleted_count: result.changes,
+      message: `${result.changes}件のタスクを削除しました`
+    })
+  } catch (error) {
+    console.error('Bulk delete error:', error)
+    return c.json({ 
+      error: 'Failed to bulk delete tasks',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
+// Task Comment API endpoints
+app.get('/api/tasks/:id/comments', async (c) => {
+  try {
+    const taskId = c.req.param('id')
+    
+    const result = await c.env.DB.prepare(`
+      SELECT 
+        tc.*,
+        u.name as user_name
+      FROM task_comments tc
+      LEFT JOIN users u ON tc.user_id = u.id
+      WHERE tc.task_id = ?
+      ORDER BY tc.created_at ASC
+    `).bind(taskId).all()
+    
+    return c.json({ 
+      success: true,
+      comments: result.results 
+    })
+  } catch (error) {
+    console.error('Failed to fetch task comments:', error)
+    return c.json({ 
+      error: 'Failed to fetch comments',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
+app.post('/api/tasks/:id/comments', async (c) => {
+  try {
+    const taskId = c.req.param('id')
+    const body = await c.req.json()
+    const { comment_text } = body
+    
+    if (!comment_text || comment_text.trim().length === 0) {
+      return c.json({ error: 'Comment text is required' }, 400)
+    }
+    
+    // Get user from auth context
+    const user = c.get('user')
+    if (!user || !user.sub) {
+      return c.json({ error: 'User not found in auth context' }, 401)
+    }
+    
+    const result = await c.env.DB.prepare(`
+      INSERT INTO task_comments (task_id, user_id, comment_text)
+      VALUES (?, ?, ?)
+    `).bind(taskId, parseInt(user.sub), comment_text.trim()).run()
+    
+    // Get the created comment with user name
+    const newComment = await c.env.DB.prepare(`
+      SELECT 
+        tc.*,
+        u.name as user_name
+      FROM task_comments tc
+      LEFT JOIN users u ON tc.user_id = u.id
+      WHERE tc.id = ?
+    `).bind(result.meta.last_row_id).first()
+    
+    return c.json({ 
+      success: true,
+      comment: newComment,
+      message: 'コメントを追加しました'
+    })
+  } catch (error) {
+    console.error('Failed to create task comment:', error)
+    return c.json({ 
+      error: 'Failed to create comment',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
+app.delete('/api/tasks/:taskId/comments/:commentId', async (c) => {
+  try {
+    const taskId = c.req.param('taskId')
+    const commentId = c.req.param('commentId')
+    
+    // Get user from auth context
+    const user = c.get('user')
+    if (!user || !user.sub) {
+      return c.json({ error: 'User not found in auth context' }, 401)
+    }
+    
+    // Check if comment exists and belongs to the user (or user is admin)
+    const comment = await c.env.DB.prepare(`
+      SELECT user_id FROM task_comments 
+      WHERE id = ? AND task_id = ?
+    `).bind(commentId, taskId).first()
+    
+    if (!comment) {
+      return c.json({ error: 'Comment not found' }, 404)
+    }
+    
+    // Allow deletion if user owns the comment or is admin
+    if (comment.user_id !== parseInt(user.sub) && user.role !== 'admin') {
+      return c.json({ error: 'Unauthorized to delete this comment' }, 403)
+    }
+    
+    await c.env.DB.prepare(`
+      DELETE FROM task_comments 
+      WHERE id = ? AND task_id = ?
+    `).bind(commentId, taskId).run()
+    
+    return c.json({ 
+      success: true,
+      message: 'コメントを削除しました'
+    })
+  } catch (error) {
+    console.error('Failed to delete task comment:', error)
+    return c.json({ 
+      error: 'Failed to delete comment',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
   }
 })
 

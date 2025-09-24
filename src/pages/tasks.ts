@@ -1000,7 +1000,7 @@ export function getTasksPage(user: any) {
                 commentsList.innerHTML = comments.map(comment => \`
                     <div class="bg-gray-50 rounded-lg p-3">
                         <div class="flex justify-between items-start mb-2">
-                            <span class="font-medium text-sm text-gray-900">\${comment.author_name || 'ユーザー'}</span>
+                            <span class="font-medium text-sm text-gray-900">\${comment.user_name || 'ユーザー'}</span>
                             <span class="text-xs text-gray-500">\${formatCommentDate(comment.created_at)}</span>
                         </div>
                         <p class="text-sm text-gray-700">\${comment.comment_text}</p>
@@ -1055,12 +1055,15 @@ export function getTasksPage(user: any) {
             if (!confirm('このコメントを削除しますか？')) return;
 
             try {
-                await axios.delete(\`/api/comments/\${commentId}\`);
+                if (!currentTask) {
+                    alert('タスクが選択されていません');
+                    return;
+                }
+                
+                await axios.delete(\`/api/tasks/\${currentTask.id}/comments/\${commentId}\`);
                 
                 // Reload comments for current task
-                if (currentTask) {
-                    await loadTaskComments(currentTask.id);
-                }
+                await loadTaskComments(currentTask.id);
             } catch (error) {
                 console.error('Failed to delete comment:', error);
                 alert('コメントの削除に失敗しました');
