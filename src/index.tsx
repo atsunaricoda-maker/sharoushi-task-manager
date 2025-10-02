@@ -1756,7 +1756,7 @@ ${payload.name}
                 selects.forEach(select => {
                     const currentValue = select.value;
                     select.innerHTML = '<option value="">選択してください</option>' + 
-                        clients.map(c => \`<option value="\${c.id}">\${c.name}</option>\`).join('');
+                        clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
                     if (currentValue) select.value = currentValue;
                 });
             } catch (error) {
@@ -2002,104 +2002,7 @@ app.get('/clients', async (c) => {
 
 // 助成金専用システム - 業務管理ページは削除
 
-// Root page - Dashboard
-app.get('/', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  // 助成金専用システム - シンプルダッシュボード
-  return c.html(`
-      <!DOCTYPE html>
-      <html lang="ja">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>ダッシュボード - 助成金管理システム</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
-      </head>
-      <body class="bg-gray-50">
-          <div class="min-h-screen">
-              <!-- Header -->
-              <header class="bg-blue-600 text-white p-4">
-                  <div class="container mx-auto flex justify-between items-center">
-                      <h1 class="text-2xl font-bold">助成金管理システム</h1>
-                      <div class="flex items-center gap-4">
-                          <span>こんにちは、${payload.name}さん</span>
-                          <button onclick="window.location.href='/logout'" class="bg-blue-700 px-4 py-2 rounded">ログアウト</button>
-                      </div>
-                  </div>
-              </header>
-              
-              <!-- Navigation -->
-              <nav class="bg-white shadow-md p-4">
-                  <div class="container mx-auto">
-                      <div class="flex space-x-6">
-                          <a href="/subsidies" class="text-yellow-600 hover:text-yellow-800 font-semibold">助成金管理</a>
-                          <a href="/clients" class="text-blue-600 hover:text-blue-800">顧問先管理</a>
-                      </div>
-                  </div>
-              </nav>
-              
-              <!-- Main Content -->
-              <main class="container mx-auto p-6">
-                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <!-- 助成金専用クイックアクセスカード -->
-                      <div class="bg-white p-6 rounded-lg shadow">
-                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-coins mr-2 text-yellow-600"></i>助成金管理</h2>
-                          <p class="text-gray-600 mb-4">申請から受給までの管理</p>
-                          <a href="/subsidies" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700">アクセス</a>
-                      </div>
-                      
-                      <div class="bg-white p-6 rounded-lg shadow">
-                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-users mr-2 text-blue-600"></i>顧問先管理</h2>
-                          <p class="text-gray-600 mb-4">申請者情報の管理</p>
-                          <a href="/clients" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">アクセス</a>
-                      </div>
-                      
-                      <div class="bg-white p-6 rounded-lg shadow">
-                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-search mr-2 text-green-600"></i>助成金検索</h2>
-                          <p class="text-gray-600 mb-4">利用可能な助成金の検索</p>
-                          <a href="/subsidies?tab=search" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">アクセス</a>
-                      </div>
-                  </div>
-                  
-                  <!-- 助成金専用メッセージ -->
-                  <div class="mt-8 bg-gradient-to-r from-yellow-50 to-amber-50 p-6 rounded-lg shadow border-l-4 border-yellow-400">
-                      <h2 class="text-2xl font-bold mb-4 text-gray-900">
-                          <i class="fas fa-coins text-yellow-600 mr-2"></i>
-                          ようこそ、${payload.name}さん
-                      </h2>
-                      <p class="text-gray-700 leading-relaxed">
-                          助成金管理システムへようこそ。このシステムでは、助成金の申請から受給までを一元管理し、効率的な業務を実現します。
-                      </p>
-                      <div class="mt-4 flex space-x-4">
-                          <a href="/subsidies" class="inline-flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
-                              <i class="fas fa-plus-circle mr-2"></i>
-                              新規申請を作成
-                          </a>
-                          <a href="/subsidies?tab=search" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                              <i class="fas fa-search mr-2"></i>
-                              助成金を検索
-                          </a>
-                      </div>
-                  </div>
-              </main>
-          </div>
-      </body>
-      </html>
-    `)
-})
+// Duplicate route handler removed - using the main dashboard route at line 1383
 
 // 助成金専用システム - リダイレクト設定
 app.get('/schedule', async (c) => c.redirect('/subsidies'))
