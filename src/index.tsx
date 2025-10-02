@@ -1756,7 +1756,7 @@ ${payload.name}
                 selects.forEach(select => {
                     const currentValue = select.value;
                     select.innerHTML = '<option value="">選択してください</option>' + 
-                        clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                        clients.map(c => '<option value="' + c.id + '">' + c.name + '</option>').join('');
                     if (currentValue) select.value = currentValue;
                 });
             } catch (error) {
