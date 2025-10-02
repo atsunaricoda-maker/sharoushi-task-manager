@@ -1773,7 +1773,7 @@ ${payload.name}
                 const selects = document.querySelectorAll('select[name="assignee_id"]');
                 selects.forEach(select => {
                     select.innerHTML = '<option value="">選択してください</option>' + 
-                        users.map(u => \`<option value="\${u.id}">\${u.name}</option>\`).join('');
+                        users.map(u => '<option value="' + u.id + '">' + u.name + '</option>').join('');
                 });
             } catch (error) {
                 console.error('Failed to load users:', error);
