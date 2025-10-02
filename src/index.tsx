@@ -8,6 +8,7 @@ import { generateToken, verifyToken, getUserByEmail, upsertUser } from './lib/au
 import subsidiesRouter from './routes/subsidies'
 // 助成金専用ページ
 import { getSubsidiesPage } from './pages/subsidies'
+import { getUnifiedSubsidiesPage } from './pages/subsidies-unified'
 
 // TypeScript types for Cloudflare bindings
 type Bindings = {
@@ -1499,7 +1500,7 @@ app.get('/', async (c) => {
                 <div class="flex items-center space-x-4">
                     <span class="text-sm text-gray-600">
                         <i class="fas fa-user-circle mr-1"></i>
-                        ${payload.name}
+${payload.name}
                     </span>
                     <button onclick="window.location.href='/auth/logout'" class="text-gray-500 hover:text-gray-700">
                         <i class="fas fa-sign-out-alt"></i>
@@ -1944,7 +1945,7 @@ app.get('/clients-debug', async (c) => {
   c.header('Pragma', 'no-cache')
   c.header('Expires', '0')
   
-  return c.html(getSimplifiedClientsPage(testUser.name))
+  return c.redirect('/subsidies')
 })
 
 // Clients page
@@ -1959,7 +1960,7 @@ app.get('/clients', async (c) => {
     c.header('Pragma', 'no-cache')
     c.header('Expires', '0')
     
-    return c.html(getSimplifiedClientsPage(testUser.name))
+    return c.redirect('/subsidies')
   }
   
   // Production authentication with emergency fallback
@@ -1990,7 +1991,7 @@ app.get('/clients', async (c) => {
   c.header('Pragma', 'no-cache')
   c.header('Expires', '0')
   
-  return c.html(getSimplifiedClientsPage(user.name))
+  return c.redirect('/subsidies')
 })
 
 // 助成金専用システム - レポートページは削除
