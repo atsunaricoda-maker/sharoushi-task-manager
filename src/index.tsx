@@ -4,21 +4,10 @@ import { serveStatic } from 'hono/cloudflare-workers'
 import { logger } from 'hono/logger'
 import { getCookie, setCookie } from 'hono/cookie'
 import { generateToken, verifyToken, getUserByEmail, upsertUser } from './lib/auth'
-import { GeminiService } from './lib/gemini'
-import { clientsRouter } from './routes/clients'
-import { reportsRouter } from './routes/reports'
-import { contactsRouter } from './routes/contacts'
-// Simplified router imports
+// 助成金専用ルーターのみ
 import subsidiesRouter from './routes/subsidies'
-import scheduleRouter from './routes/schedule'
-import { getSimplifiedClientsPage } from './pages/clients-simplified'
-import { getReportsPage } from './pages/reports'
-import { getSettingsPage } from './pages/settings'
-// Restored subsidies page import with proper error handling
-import { getUnifiedSubsidiesPage } from './pages/subsidies-unified'
-import { getSchedulePage } from './pages/schedule'
-import { getTasksPage } from './pages/tasks'
-import { getBusinessManagementPage } from './pages/business'
+// 助成金専用ページ
+import { getSubsidiesPage } from './pages/subsidies'
 
 // TypeScript types for Cloudflare bindings
 type Bindings = {
@@ -129,16 +118,16 @@ async function checkAuth(c: any, next: any) {
   }
 }
 
-// Public test endpoint for debugging (must be before auth middleware)
+// 助成金専用システム - テスト用エンドポイント（助成金テーブル用）
 app.get('/api/public/test', async (c) => {
   try {
     const testResult = await c.env.DB.prepare(`
-      SELECT COUNT(*) as count FROM tasks
+      SELECT COUNT(*) as count FROM subsidy_applications
     `).first()
     
     const dateTestResult = await c.env.DB.prepare(`
       SELECT COUNT(*) as count 
-      FROM tasks 
+      FROM subsidy_applications 
       WHERE DATE(created_at) BETWEEN '2025-09-01' AND '2025-09-30'
     `).first()
     
@@ -146,7 +135,7 @@ app.get('/api/public/test', async (c) => {
       success: true,
       basic_test: testResult,
       date_test: dateTestResult,
-      message: 'Public test endpoint working'
+      message: 'Subsidy system test endpoint working'
     })
   } catch (error) {
     console.error('Public test error:', error)
@@ -341,23 +330,10 @@ app.get('/dev-login', (c) => {
   `)
 })
 
-// Mount routers first (before auth middleware)
-// Calendar API (unified schedule functionality)
-app.route('/api/schedule', scheduleRouter)
-app.route('/api/calendar', scheduleRouter) // Alias for calendar functionality
-
-// Simplified auth middleware - only for core functions
-app.use('/api/tasks/*', checkAuth)
-app.use('/api/clients/*', checkAuth)
-app.use('/api/contacts/*', checkAuth)
-app.use('/api/users/*', checkAuth)
-app.use('/api/dashboard/*', checkAuth)
+// 助成金機能専用のauth middleware
 app.use('/api/subsidies/*', checkAuth)
 
-// Core API routes only
-app.route('/api/clients', clientsRouter)
-app.route('/api/contacts', contactsRouter)
-app.route('/api/reports', reportsRouter)
+// 助成金APIルートのみ
 app.route('/api/subsidies', subsidiesRouter)
 
 // PUBLIC Database reset endpoint (NO AUTH REQUIRED)
@@ -507,33 +483,7 @@ app.post('/api/public/init-db', async (c) => {
       results.push(`❌ clients: ${error.message}`)
     }
     
-    // Create tasks table
-    try {
-      await c.env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS tasks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL,
-          description TEXT,
-          client_id INTEGER NOT NULL,
-          assignee_id INTEGER NOT NULL,
-          task_type TEXT NOT NULL DEFAULT 'regular',
-          status TEXT DEFAULT 'pending',
-          priority TEXT DEFAULT 'medium',
-          due_date DATE,
-          estimated_hours DECIMAL(4,1),
-          actual_hours DECIMAL(4,1),
-          progress INTEGER DEFAULT 0,
-          notes TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (client_id) REFERENCES clients (id),
-          FOREIGN KEY (assignee_id) REFERENCES users (id)
-        )
-      `).run()
-      results.push('✅ tasks table created')
-    } catch (error) {
-      results.push(`❌ tasks: ${error.message}`)
-    }
+    // 助成金専用システム - tasksテーブルは不要のため削除
     
     // Create subsidy_applications table
     try {
@@ -705,7 +655,7 @@ app.post('/api/public/init-db', async (c) => {
     // Verify table creation
     const tables = await c.env.DB.prepare(`
       SELECT name FROM sqlite_master WHERE type='table' AND name IN (
-        'users', 'clients', 'tasks', 'subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents', 'client_contacts'
+        'users', 'clients', 'subsidy_applications', 'subsidies', 'subsidy_checklists', 'subsidy_documents', 'client_contacts'
       )
     `).all()
     
@@ -1273,483 +1223,21 @@ app.get('/api/auth/status', async (c) => {
   })
 })
 
-// AI Task Generation API
-app.post('/api/ai/generate-tasks', async (c) => {
-  try {
-    const { client_id, month } = await c.req.json()
-    
-    // Get client information
-    const client = await c.env.DB.prepare(
-      'SELECT * FROM clients WHERE id = ?'
-    ).bind(client_id).first()
-    
-    if (!client) {
-      return c.json({ error: 'Client not found' }, 404)
-    }
-    
-    // Initialize Gemini service
-    const gemini = new GeminiService(c.env.GEMINI_API_KEY)
-    
-    // Generate tasks using AI
-    const generatedTasks = await gemini.generateTasksFromClientInfo(
-      client.name as string,
-      client.employee_count as number,
-      client.contract_plan as string,
-      month
-    )
-    
-    // Get current user from auth
-    const user = c.get('user')
-    const userId = parseInt(user.sub)
-    
-    // Save generated tasks to database
-    const savedTasks = []
-    for (const task of generatedTasks) {
-      const result = await c.env.DB.prepare(`
-        INSERT INTO tasks (
-          title, description, client_id, assignee_id, 
-          task_type, status, priority, due_date, estimated_hours
-        ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
-      `).bind(
-        task.title,
-        task.description,
-        client_id,
-        userId,
-        task.task_type,
-        task.priority,
-        task.due_date,
-        task.estimated_hours
-      ).run()
-      
-      savedTasks.push({
-        id: result.meta.last_row_id,
-        ...task
-      })
-    }
-    
-    return c.json({
-      success: true,
-      message: `${savedTasks.length}個のタスクを自動生成しました`,
-      tasks: savedTasks
-    })
-  } catch (error) {
-    console.error('Task generation error:', error)
-    return c.json({ 
-      error: 'タスク生成に失敗しました',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
+// 助成金専用システムではAI機能は削除
 
-// AI Task Description Enhancement
-app.post('/api/ai/enhance-description', async (c) => {
-  try {
-    const { task_title } = await c.req.json()
-    
-    const gemini = new GeminiService(c.env.GEMINI_API_KEY)
-    const description = await gemini.generateTaskDescription(task_title)
-    
-    return c.json({
-      success: true,
-      description
-    })
-  } catch (error) {
-    return c.json({ 
-      error: 'Description generation failed',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
+// 助成金専用システムのため、タスク管理機能は削除
 
-// Existing API routes (Tasks, Clients, Users, Dashboard)
-app.get('/api/tasks', async (c) => {
-  try {
-    const { status, assignee_id, client_id, priority } = c.req.query()
-    
-    let query = `
-      SELECT 
-        t.*,
-        u.name as assignee_name,
-        c.name as client_name
-      FROM tasks t
-      LEFT JOIN users u ON t.assignee_id = u.id
-      LEFT JOIN clients c ON t.client_id = c.id
-      WHERE 1=1
-    `
-    const params: any[] = []
+// 助成金専用システムのため、タスク関連APIは全て削除
 
-    if (status) {
-      query += ' AND t.status = ?'
-      params.push(status)
-    }
-    if (assignee_id) {
-      query += ' AND t.assignee_id = ?'
-      params.push(assignee_id)
-    }
-    if (client_id) {
-      query += ' AND t.client_id = ?'
-      params.push(client_id)
-    }
-    if (priority) {
-      query += ' AND t.priority = ?'
-      params.push(priority)
-    }
-
-    query += ' ORDER BY t.due_date ASC, t.priority DESC'
-
-    const result = await c.env.DB.prepare(query).bind(...params).all()
-    return c.json({ tasks: result.results })
-  } catch (error) {
-    return c.json({ error: 'Failed to fetch tasks' }, 500)
-  }
-})
-
-app.get('/api/tasks/:id', async (c) => {
-  try {
-    const id = c.req.param('id')
-    const result = await c.env.DB.prepare(`
-      SELECT 
-        t.*,
-        u.name as assignee_name,
-        c.name as client_name
-      FROM tasks t
-      LEFT JOIN users u ON t.assignee_id = u.id
-      LEFT JOIN clients c ON t.client_id = c.id
-      WHERE t.id = ?
-    `).bind(id).first()
-    
-    if (!result) {
-      return c.json({ error: 'Task not found' }, 404)
-    }
-    
-    return c.json(result)
-  } catch (error) {
-    return c.json({ error: 'Failed to fetch task' }, 500)
-  }
-})
-
-app.post('/api/tasks', async (c) => {
-  try {
-    const body = await c.req.json()
-    const { title, description, client_id, assignee_id, task_type, priority, due_date, estimated_hours } = body
-
-    const result = await c.env.DB.prepare(`
-      INSERT INTO tasks (title, description, client_id, assignee_id, task_type, priority, due_date, estimated_hours)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(title, description, client_id, assignee_id, task_type, priority, due_date, estimated_hours).run()
-
-    return c.json({ 
-      success: true,
-      id: result.meta.last_row_id,
-      message: 'タスクを作成しました'
-    })
-  } catch (error) {
-    return c.json({ error: 'Failed to create task' }, 500)
-  }
-})
-
-app.put('/api/tasks/:id', async (c) => {
-  try {
-    const id = c.req.param('id')
-    const body = await c.req.json()
-    
-    // Support ALL task fields for complete updates
-    const { 
-      title, description, client_id, assignee_id, task_type,
-      status, priority, progress, actual_hours, 
-      due_date, estimated_hours, notes 
-    } = body
-
-    // Get current task for status tracking
-    const currentTask = await c.env.DB.prepare('SELECT status FROM tasks WHERE id = ?').bind(id).first()
-    
-    if (!currentTask) {
-      return c.json({ error: 'Task not found' }, 404)
-    }
-    
-    // Build dynamic update query based on provided fields
-    const updates = []
-    const params = []
-    
-    if (title !== undefined) { updates.push('title = ?'); params.push(title) }
-    if (description !== undefined) { updates.push('description = ?'); params.push(description) }
-    if (client_id !== undefined) { updates.push('client_id = ?'); params.push(client_id) }
-    if (assignee_id !== undefined) { updates.push('assignee_id = ?'); params.push(assignee_id) }
-    if (task_type !== undefined) { updates.push('task_type = ?'); params.push(task_type) }
-    if (status !== undefined) { updates.push('status = ?'); params.push(status) }
-    if (priority !== undefined) { updates.push('priority = ?'); params.push(priority) }
-    if (progress !== undefined) { updates.push('progress = ?'); params.push(progress) }
-    if (actual_hours !== undefined) { updates.push('actual_hours = ?'); params.push(actual_hours) }
-    if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date) }
-    if (estimated_hours !== undefined) { updates.push('estimated_hours = ?'); params.push(estimated_hours) }
-    if (notes !== undefined) { updates.push('notes = ?'); params.push(notes) }
-    
-    // Always update timestamp
-    updates.push('updated_at = CURRENT_TIMESTAMP')
-    
-    // Set completed_at if task is being completed
-    if (status === 'completed' && currentTask?.status !== 'completed') {
-      updates.push('completed_at = CURRENT_TIMESTAMP')
-    }
-    
-    if (updates.length === 1) { // Only updated_at
-      return c.json({ 
-        success: true,
-        message: 'No changes to update'
-      })
-    }
-    
-    // Add ID parameter for WHERE clause
-    params.push(id)
-    
-    const updateQuery = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`
-    
-    await c.env.DB.prepare(updateQuery).bind(...params).run()
-
-    return c.json({ 
-      success: true,
-      message: 'タスクを更新しました'
-    })
-  } catch (error) {
-    console.error('Task update error:', error)
-    return c.json({ 
-      error: 'Failed to update task',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
-
-app.delete('/api/tasks/:id', async (c) => {
-  try {
-    const id = c.req.param('id')
-    await c.env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(id).run()
-    
-    return c.json({ 
-      success: true,
-      message: 'タスクを削除しました'
-    })
-  } catch (error) {
-    return c.json({ error: 'Failed to delete task' }, 500)
-  }
-})
-
-// Bulk operations for efficient task management
-app.patch('/api/tasks/bulk', async (c) => {
-  try {
-    const body = await c.req.json()
-    const { task_ids, updates } = body
-    
-    if (!task_ids || !Array.isArray(task_ids) || task_ids.length === 0) {
-      return c.json({ error: 'task_ids array is required' }, 400)
-    }
-    
-    if (!updates || typeof updates !== 'object') {
-      return c.json({ error: 'updates object is required' }, 400)
-    }
-    
-    // Build dynamic update query
-    const updateFields = []
-    const params = []
-    
-    if (updates.status !== undefined) { updateFields.push('status = ?'); params.push(updates.status) }
-    if (updates.priority !== undefined) { updateFields.push('priority = ?'); params.push(updates.priority) }
-    if (updates.assignee_id !== undefined) { updateFields.push('assignee_id = ?'); params.push(updates.assignee_id) }
-    if (updates.client_id !== undefined) { updateFields.push('client_id = ?'); params.push(updates.client_id) }
-    if (updates.progress !== undefined) { updateFields.push('progress = ?'); params.push(updates.progress) }
-    
-    // Always update timestamp
-    updateFields.push('updated_at = CURRENT_TIMESTAMP')
-    
-    // Set completed_at for completed tasks
-    if (updates.status === 'completed') {
-      updateFields.push('completed_at = CURRENT_TIMESTAMP')
-    }
-    
-    if (updateFields.length === 1) { // Only updated_at
-      return c.json({ error: 'No valid update fields provided' }, 400)
-    }
-    
-    // Create placeholders for task IDs
-    const placeholders = task_ids.map(() => '?').join(', ')
-    const updateQuery = `
-      UPDATE tasks 
-      SET ${updateFields.join(', ')} 
-      WHERE id IN (${placeholders})
-    `
-    
-    // Combine update params with task IDs
-    const allParams = [...params, ...task_ids]
-    
-    const result = await c.env.DB.prepare(updateQuery).bind(...allParams).run()
-    
-    return c.json({ 
-      success: true,
-      updated_count: result.changes,
-      message: `${result.changes}件のタスクを更新しました`
-    })
-  } catch (error) {
-    console.error('Bulk update error:', error)
-    return c.json({ 
-      error: 'Failed to bulk update tasks',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
-
-app.delete('/api/tasks/bulk', async (c) => {
-  try {
-    const body = await c.req.json()
-    const { task_ids } = body
-    
-    if (!task_ids || !Array.isArray(task_ids) || task_ids.length === 0) {
-      return c.json({ error: 'task_ids array is required' }, 400)
-    }
-    
-    // Create placeholders for task IDs  
-    const placeholders = task_ids.map(() => '?').join(', ')
-    const deleteQuery = `DELETE FROM tasks WHERE id IN (${placeholders})`
-    
-    const result = await c.env.DB.prepare(deleteQuery).bind(...task_ids).run()
-    
-    return c.json({ 
-      success: true,
-      deleted_count: result.changes,
-      message: `${result.changes}件のタスクを削除しました`
-    })
-  } catch (error) {
-    console.error('Bulk delete error:', error)
-    return c.json({ 
-      error: 'Failed to bulk delete tasks',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
-
-// Task Comment API endpoints
-app.get('/api/tasks/:id/comments', async (c) => {
-  try {
-    const taskId = c.req.param('id')
-    
-    const result = await c.env.DB.prepare(`
-      SELECT 
-        tc.*,
-        u.name as user_name
-      FROM task_comments tc
-      LEFT JOIN users u ON tc.user_id = u.id
-      WHERE tc.task_id = ?
-      ORDER BY tc.created_at ASC
-    `).bind(taskId).all()
-    
-    return c.json({ 
-      success: true,
-      comments: result.results 
-    })
-  } catch (error) {
-    console.error('Failed to fetch task comments:', error)
-    return c.json({ 
-      error: 'Failed to fetch comments',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
-
-app.post('/api/tasks/:id/comments', async (c) => {
-  try {
-    const taskId = c.req.param('id')
-    const body = await c.req.json()
-    const { comment_text } = body
-    
-    if (!comment_text || comment_text.trim().length === 0) {
-      return c.json({ error: 'Comment text is required' }, 400)
-    }
-    
-    // Get user from auth context
-    const user = c.get('user')
-    if (!user || !user.sub) {
-      return c.json({ error: 'User not found in auth context' }, 401)
-    }
-    
-    const result = await c.env.DB.prepare(`
-      INSERT INTO task_comments (task_id, user_id, comment_text)
-      VALUES (?, ?, ?)
-    `).bind(taskId, parseInt(user.sub), comment_text.trim()).run()
-    
-    // Get the created comment with user name
-    const newComment = await c.env.DB.prepare(`
-      SELECT 
-        tc.*,
-        u.name as user_name
-      FROM task_comments tc
-      LEFT JOIN users u ON tc.user_id = u.id
-      WHERE tc.id = ?
-    `).bind(result.meta.last_row_id).first()
-    
-    return c.json({ 
-      success: true,
-      comment: newComment,
-      message: 'コメントを追加しました'
-    })
-  } catch (error) {
-    console.error('Failed to create task comment:', error)
-    return c.json({ 
-      error: 'Failed to create comment',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
-
-app.delete('/api/tasks/:taskId/comments/:commentId', async (c) => {
-  try {
-    const taskId = c.req.param('taskId')
-    const commentId = c.req.param('commentId')
-    
-    // Get user from auth context
-    const user = c.get('user')
-    if (!user || !user.sub) {
-      return c.json({ error: 'User not found in auth context' }, 401)
-    }
-    
-    // Check if comment exists and belongs to the user (or user is admin)
-    const comment = await c.env.DB.prepare(`
-      SELECT user_id FROM task_comments 
-      WHERE id = ? AND task_id = ?
-    `).bind(commentId, taskId).first()
-    
-    if (!comment) {
-      return c.json({ error: 'Comment not found' }, 404)
-    }
-    
-    // Allow deletion if user owns the comment or is admin
-    if (comment.user_id !== parseInt(user.sub) && user.role !== 'admin') {
-      return c.json({ error: 'Unauthorized to delete this comment' }, 403)
-    }
-    
-    await c.env.DB.prepare(`
-      DELETE FROM task_comments 
-      WHERE id = ? AND task_id = ?
-    `).bind(commentId, taskId).run()
-    
-    return c.json({ 
-      success: true,
-      message: 'コメントを削除しました'
-    })
-  } catch (error) {
-    console.error('Failed to delete task comment:', error)
-    return c.json({ 
-      error: 'Failed to delete comment',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500)
-  }
-})
-
+// 助成金専用システム - 顧客管理（助成金申請用）
 app.get('/api/clients', async (c) => {
   try {
     const result = await c.env.DB.prepare(`
       SELECT 
         c.*,
-        COUNT(DISTINCT t.id) as active_tasks
+        COUNT(DISTINCT s.id) as subsidy_applications
       FROM clients c
-      LEFT JOIN tasks t ON c.id = t.client_id AND t.status != 'completed'
+      LEFT JOIN subsidy_applications s ON c.id = s.client_id
       GROUP BY c.id
       ORDER BY c.name ASC
     `).all()
@@ -1760,16 +1248,15 @@ app.get('/api/clients', async (c) => {
   }
 })
 
+// 助成金専用システム - ユーザー管理（助成金担当者用）
 app.get('/api/users', async (c) => {
   try {
     const result = await c.env.DB.prepare(`
       SELECT 
         u.*,
-        COUNT(DISTINCT t.id) as assigned_tasks,
-        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
-        SUM(CASE WHEN t.status = 'overdue' THEN 1 ELSE 0 END) as overdue_tasks
+        COUNT(DISTINCT s.id) as created_subsidies
       FROM users u
-      LEFT JOIN tasks t ON u.id = t.assignee_id
+      LEFT JOIN subsidy_applications s ON u.id = s.created_by
       GROUP BY u.id
       ORDER BY u.name ASC
     `).all()
@@ -1780,55 +1267,53 @@ app.get('/api/users', async (c) => {
   }
 })
 
+// 助成金専用システム - ダッシュボード統計（助成金申請情報）
 app.get('/api/dashboard/stats', async (c) => {
   try {
-    const todayTasks = await c.env.DB.prepare(`
-      SELECT COUNT(*) as count FROM tasks 
-      WHERE date(due_date) = date('now') 
-      AND status != 'completed'
+    const totalApplications = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM subsidy_applications
     `).first()
 
-    const overdueTasks = await c.env.DB.prepare(`
-      SELECT COUNT(*) as count FROM tasks 
-      WHERE date(due_date) < date('now') 
-      AND status != 'completed'
+    const preparingApplications = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM subsidy_applications 
+      WHERE status = 'preparing'
     `).first()
 
-    const weekTasks = await c.env.DB.prepare(`
-      SELECT COUNT(*) as count FROM tasks 
-      WHERE date(due_date) BETWEEN date('now') AND date('now', '+7 days')
-      AND status != 'completed'
+    const submittedApplications = await c.env.DB.prepare(`
+      SELECT COUNT(*) as count FROM subsidy_applications 
+      WHERE status = 'submitted'
     `).first()
 
     const statusDistribution = await c.env.DB.prepare(`
       SELECT status, COUNT(*) as count 
-      FROM tasks 
+      FROM subsidy_applications 
       GROUP BY status
     `).all()
 
-    const workload = await c.env.DB.prepare(`
+    const userWorkload = await c.env.DB.prepare(`
       SELECT 
         u.id,
         u.name,
-        COUNT(t.id) as total_tasks,
-        SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
-        SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN t.status = 'overdue' OR (date(t.due_date) < date('now') AND t.status != 'completed') THEN 1 ELSE 0 END) as overdue
+        COUNT(s.id) as total_applications,
+        SUM(CASE WHEN s.status = 'preparing' THEN 1 ELSE 0 END) as preparing,
+        SUM(CASE WHEN s.status = 'submitted' THEN 1 ELSE 0 END) as submitted,
+        SUM(CASE WHEN s.status = 'approved' THEN 1 ELSE 0 END) as approved
       FROM users u
-      LEFT JOIN tasks t ON u.id = t.assignee_id AND t.status != 'completed'
+      LEFT JOIN subsidy_applications s ON u.id = s.created_by
       GROUP BY u.id, u.name
-      ORDER BY total_tasks DESC
+      ORDER BY total_applications DESC
     `).all()
 
     return c.json({
-      today: todayTasks?.count || 0,
-      overdue: overdueTasks?.count || 0,
-      thisWeek: weekTasks?.count || 0,
+      today: preparingApplications?.count || 0,
+      overdue: 0, // 助成金システムでは期限過ぎの概念が異なる
+      thisWeek: submittedApplications?.count || 0,
+      total: totalApplications?.count || 0,
       statusDistribution: statusDistribution.results,
-      workload: workload.results
+      workload: userWorkload.results
     })
   } catch (error) {
-    return c.json({ error: 'Failed to fetch dashboard stats' }, 500)
+    return c.json({ error: 'Failed to fetch subsidy dashboard stats' }, 500)
   }
 })
 
@@ -2081,39 +1566,39 @@ app.get('/', async (c) => {
             </div>
         </div>
 
-        <!-- Main Dashboard Grid -->
+        <!-- Main Dashboard Grid - 助成金専用 -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Recent Tasks -->
+            <!-- Recent Subsidy Applications -->
             <div class="bg-white rounded-lg shadow">
                 <div class="px-6 py-4 border-b flex justify-between items-center">
                     <h2 class="text-lg font-semibold text-gray-900">
-                        <i class="fas fa-list-check mr-2 text-blue-600"></i>
-                        今日やることリスト
+                        <i class="fas fa-coins mr-2 text-yellow-600"></i>
+                        最近の助成金申請
                     </h2>
-                    <button onclick="openTaskModal()" class="text-blue-600 hover:text-blue-700 text-sm">
-                        <i class="fas fa-plus-circle mr-1"></i> やることを追加
-                    </button>
+                    <a href="/subsidies" class="text-blue-600 hover:text-blue-700 text-sm">
+                        <i class="fas fa-plus-circle mr-1"></i> 新規申請
+                    </a>
                 </div>
                 <div class="p-6">
-                    <div id="taskList" class="space-y-3">
+                    <div id="subsidyList" class="space-y-3">
                         <div class="text-center py-8 text-gray-500">
                             <i class="fas fa-spinner fa-spin text-2xl"></i>
-                            <p class="mt-2">読み込み中...</p>
+                            <p class="mt-2">助成金データを読み込み中...</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Workload Chart -->
+            <!-- Subsidy Status Chart -->
             <div class="bg-white rounded-lg shadow">
                 <div class="px-6 py-4 border-b">
                     <h2 class="text-lg font-semibold text-gray-900">
-                        <i class="fas fa-users mr-2 text-green-600"></i>
-                        みんなの作業状況
+                        <i class="fas fa-chart-pie mr-2 text-green-600"></i>
+                        申請状況
                     </h2>
                 </div>
                 <div class="p-6">
-                    <canvas id="workloadChart"></canvas>
+                    <canvas id="subsidyStatusChart"></canvas>
                 </div>
             </div>
         </div>
@@ -2155,53 +1640,40 @@ app.get('/', async (c) => {
             <p class="text-gray-600 text-center mb-8">やりたいことをクリックしてください</p>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <!-- 業務管理 (統合版) -->
-                <a href="/business" class="group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 border-2 border-transparent hover:border-blue-300 shadow-lg hover:shadow-xl">
+                <!-- 助成金管理 (メイン機能) -->
+                <a href="/subsidies" class="group bg-gradient-to-br from-yellow-50 to-amber-100 rounded-xl p-8 hover:from-yellow-100 hover:to-amber-200 transition-all duration-200 border-2 border-transparent hover:border-yellow-300 shadow-lg hover:shadow-xl">
                     <div class="text-center">
-                        <div class="bg-blue-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                            <i class="fas fa-briefcase text-white text-3xl"></i>
+                        <div class="bg-yellow-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-coins text-white text-3xl"></i>
                         </div>
-                        <h4 class="text-2xl font-bold text-gray-900 mb-3">業務管理</h4>
-                        <p class="text-gray-600">タスク・予定・進捗を統合して効率的に管理</p>
+                        <h4 class="text-2xl font-bold text-gray-900 mb-3">助成金管理</h4>
+                        <p class="text-gray-600">申請から受給まで一括管理・進捗追跡</p>
                         <div class="mt-4 flex justify-center space-x-4 text-sm text-gray-500">
-                            <span><i class="fas fa-tasks mr-1"></i>タスク</span>
-                            <span><i class="fas fa-calendar mr-1"></i>予定</span>
+                            <span><i class="fas fa-file-alt mr-1"></i>申請</span>
+                            <span><i class="fas fa-search mr-1"></i>検索</span>
                             <span><i class="fas fa-chart-line mr-1"></i>進捗</span>
                         </div>
                     </div>
                 </a>
                 
-                <!-- 顧問先管理 -->
-                <a href="/clients" class="group bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 hover:from-green-100 hover:to-green-200 transition-all duration-200 border-2 border-transparent hover:border-green-300 shadow-lg hover:shadow-xl">
+                <!-- 顧問先管理 (助成金申請者管理) -->
+                <a href="/clients" class="group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 border-2 border-transparent hover:border-blue-300 shadow-lg hover:shadow-xl">
                     <div class="text-center">
-                        <div class="bg-green-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                        <div class="bg-blue-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
                             <i class="fas fa-building text-white text-3xl"></i>
                         </div>
                         <h4 class="text-2xl font-bold text-gray-900 mb-3">顧問先管理</h4>
-                        <p class="text-gray-600">お客様の基本情報・連絡履歴・契約状況</p>
+                        <p class="text-gray-600">助成金申請者の基本情報・連絡履歴</p>
                         <div class="mt-4 flex justify-center space-x-4 text-sm text-gray-500">
                             <span><i class="fas fa-address-book mr-1"></i>連絡先</span>
-                            <span><i class="fas fa-handshake mr-1"></i>契約</span>
+                            <span><i class="fas fa-coins mr-1"></i>申請履歴</span>
                             <span><i class="fas fa-history mr-1"></i>履歴</span>
                         </div>
                     </div>
                 </a>
             </div>
             
-            <!-- 助成金管理 (社労士特化機能) -->
-            <div class="mt-8">
-                <a href="/subsidies" class="block group bg-gradient-to-r from-amber-50 to-yellow-100 rounded-xl p-6 hover:from-amber-100 hover:to-yellow-200 transition-all duration-200 border-2 border-transparent hover:border-yellow-300 shadow-lg hover:shadow-xl">
-                    <div class="flex items-center justify-center">
-                        <div class="bg-yellow-600 rounded-full w-16 h-16 flex items-center justify-center mr-6 group-hover:scale-110 transition-transform">
-                            <i class="fas fa-coins text-white text-2xl"></i>
-                        </div>
-                        <div>
-                            <h4 class="text-xl font-bold text-gray-900 mb-2">助成金管理</h4>
-                            <p class="text-gray-600">申請から受給まで一括管理</p>
-                        </div>
-                    </div>
-                </a>
-            </div>
+
         </div>
 
         <!-- 簡単アクション -->
@@ -2218,79 +1690,8 @@ app.get('/', async (c) => {
         </div>
     </main>
 
-    <!-- Task Modal -->
-    <div id="taskModal" class="modal">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
-            <div class="px-6 py-4 border-b flex justify-between items-center">
-                <h3 class="text-lg font-semibold">新規タスク作成</h3>
-                <button onclick="closeTaskModal()" class="text-gray-500 hover:text-gray-700">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="p-6">
-                <form id="taskForm" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">タスク名</label>
-                        <input type="text" name="title" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">説明</label>
-                        <textarea name="description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">顧問先</label>
-                            <select name="client_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="">選択してください</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">担当者</label>
-                            <select name="assignee_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="">選択してください</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">タイプ</label>
-                            <select name="task_type" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="regular">定期業務</option>
-                                <option value="irregular">不定期業務</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">優先度</label>
-                            <select name="priority" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="urgent">緊急</option>
-                                <option value="high">高</option>
-                                <option value="medium" selected>中</option>
-                                <option value="low">低</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">期限</label>
-                            <input type="date" name="due_date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">予定工数（時間）</label>
-                            <input type="number" name="estimated_hours" step="0.5" min="0.5" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        </div>
-                    </div>
-                    <div class="flex justify-end space-x-3 pt-4">
-                        <button type="button" onclick="closeTaskModal()" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-                            キャンセル
-                        </button>
-                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                            作成
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+    <!-- 助成金専用システム - タスクモーダルは削除 -->
+    <!-- 助成金申請は /subsidies ページで管理 -->
 
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
     <script>
@@ -2334,10 +1735,10 @@ app.get('/', async (c) => {
                 const inProgress = stats.statusDistribution.find(s => s.status === 'in_progress');
                 if (inProgressCountEl) inProgressCountEl.textContent = inProgress ? inProgress.count : 0;
                 
-                drawWorkloadChart(stats.workload);
+                drawSubsidyChart(stats.workload);
                 
-                const tasksRes = await axios.get('/api/tasks?status=pending');
-                displayTasks(tasksRes.data.tasks);
+                // 助成金申請一覧を表示
+                await loadSubsidyApplications();
                 
             } catch (error) {
                 console.error('Failed to load dashboard:', error);
@@ -2378,7 +1779,76 @@ app.get('/', async (c) => {
             }
         }
         
-        function displayTasks(tasks) {
+        // 助成金専用 - 最近の申請一覧表示
+        async function loadSubsidyApplications() {
+            try {
+                const response = await axios.get('/api/subsidies/applications?limit=5');
+                const applications = response.data.applications || [];
+                
+                const subsidyList = document.getElementById('subsidyList');
+                
+                if (!subsidyList) {
+                    console.error('subsidyList element not found');
+                    return;
+                }
+                
+                if (applications.length === 0) {
+                    subsidyList.innerHTML = '<p class="text-gray-500 text-center py-4">助成金申請がありません</p>';
+                    return;
+                }
+                
+                const statusColors = {
+                    preparing: 'bg-yellow-100 text-yellow-800',
+                    submitted: 'bg-blue-100 text-blue-800',
+                    approved: 'bg-green-100 text-green-800',
+                    rejected: 'bg-red-100 text-red-800'
+                };
+                
+                const statusLabels = {
+                    preparing: '準備中',
+                    submitted: '申請済',
+                    approved: '承認',
+                    rejected: '否認'
+                };
+                
+                subsidyList.innerHTML = applications.map(app => `
+                    <div class="border rounded-lg p-4 hover:shadow-lg hover:border-yellow-300 transition-all duration-200 cursor-pointer" onclick="window.location.href='/subsidies'" title="クリックで詳細表示">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <h3 class="font-medium text-gray-900 hover:text-yellow-600 transition-colors">${app.subsidy_name}</h3>
+                                <div class="flex items-center mt-2 text-sm text-gray-600">
+                                    <i class="fas fa-building mr-1"></i>
+                                    <span class="mr-3">${app.client_name || '-'}</span>
+                                    <i class="fas fa-yen-sign mr-1"></i>
+                                    <span>${app.expected_amount ? app.expected_amount.toLocaleString() + '円' : '-'}</span>
+                                </div>
+                                <div class="flex items-center mt-2 space-x-3">
+                                    <span class="px-2 py-1 text-xs font-medium rounded ${statusColors[app.status]}">
+                                        ${statusLabels[app.status] || app.status}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end space-y-2">
+                                <span class="text-sm text-gray-600">
+                                    <i class="fas fa-calendar mr-1"></i>
+                                    ${app.deadline_date ? new Date(app.deadline_date).toLocaleDateString('ja-JP') : '期限なし'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Failed to load subsidy applications:', error);
+                const subsidyList = document.getElementById('subsidyList');
+                if (subsidyList) {
+                    subsidyList.innerHTML = '<p class="text-red-500 text-center py-4">助成金データの読み込みに失敗しました</p>';
+                }
+            }
+        }
+        
+        // 助成金専用 - displayTasks関数を削除してloadSubsidyApplicationsに置き換え
+        function displayTasks_REMOVED_FOR_SUBSIDY_ONLY(tasks) {
             const taskList = document.getElementById('taskList');
             
             if (!taskList) {
@@ -2460,50 +1930,7 @@ app.get('/', async (c) => {
             }).join('');
         }
         
-        // Quick task status update from dashboard
-        async function quickUpdateTaskStatus(taskId, currentStatus) {
-            // Simple progress update - cycle through statuses
-            const statusFlow = {
-                'pending': 'in_progress',
-                'in_progress': 'completed',
-                'completed': 'pending'
-            };
-            
-            const newStatus = statusFlow[currentStatus] || 'in_progress';
-            const newProgress = newStatus === 'completed' ? 100 : newStatus === 'in_progress' ? 50 : 0;
-            
-            try {
-                await axios.put('/api/tasks/' + taskId, {
-                    status: newStatus,
-                    progress: newProgress
-                });
-                
-                showToast('タスクの進捗を更新しました', 'success');
-                
-                // Refresh dashboard data
-                await loadDashboard();
-                
-            } catch (error) {
-                console.error('Failed to update task:', error);
-                showToast('タスクの更新に失敗しました', 'error');
-            }
-        }
-        
-        // Quick task edit from dashboard (redirect to task management)
-        function quickEditTask(taskId) {
-            // Store the task ID to highlight after navigation
-            sessionStorage.setItem('editTaskId', taskId);
-            // Navigate to task management page
-            window.location.href = '/tasks';
-        }
-        
-        // View task detail from dashboard (redirect to task management with detail view)
-        function viewTaskDetail(taskId) {
-            // Store the task ID to show detail after navigation
-            sessionStorage.setItem('viewTaskDetailId', taskId);
-            // Navigate to task management page
-            window.location.href = '/tasks';
-        }
+        // 助成金専用システム - タスク関連機能は削除済み
         
         // Toast notification system
         function showToast(message, type = 'info', duration = 3000) {
@@ -2528,11 +1955,12 @@ app.get('/', async (c) => {
             }, duration);
         }
         
-        function drawWorkloadChart(workloadData) {
-            const chartElement = document.getElementById('workloadChart');
+        // 助成金専用 - チャート表示関数
+        function drawSubsidyChart(workloadData) {
+            const chartElement = document.getElementById('subsidyStatusChart');
             
             if (!chartElement) {
-                console.error('workloadChart element not found');
+                console.error('subsidyStatusChart element not found');
                 return;
             }
             
@@ -2545,37 +1973,25 @@ app.get('/', async (c) => {
             const ctx = chartElement.getContext('2d');
             
             workloadChartInstance = new Chart(ctx, {
-                type: 'bar',
+                type: 'doughnut',
                 data: {
                     labels: workloadData.map(w => w.name),
                     datasets: [
                         {
-                            label: '進行中',
-                            data: workloadData.map(w => w.in_progress),
-                            backgroundColor: '#0066cc',
-                            stack: 'stack0'
-                        },
-                        {
-                            label: '未着手',
-                            data: workloadData.map(w => w.pending),
-                            backgroundColor: '#666666',
-                            stack: 'stack0'
-                        },
-                        {
-                            label: '遅延',
-                            data: workloadData.map(w => w.overdue),
-                            backgroundColor: '#ff4444',
-                            stack: 'stack0'
+                            label: '申請件数',
+                            data: workloadData.map(w => w.total_applications || 0),
+                            backgroundColor: [
+                                '#fbbf24', // preparing
+                                '#3b82f6', // submitted
+                                '#10b981', // approved
+                                '#ef4444'  // rejected
+                            ]
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                        x: { stacked: true },
-                        y: { stacked: true, beginAtZero: true }
-                    },
                     plugins: {
                         legend: { position: 'bottom' }
                     }
@@ -2583,107 +1999,11 @@ app.get('/', async (c) => {
             });
         }
         
-        // Task Modal Functions
-        function openTaskModal() {
-            const taskModal = document.getElementById('taskModal');
-            if (taskModal) {
-                taskModal.classList.add('active');
-            } else {
-                console.error('taskModal element not found');
-            }
-        }
+        // 助成金専用システム - タスクモーダル機能は削除済み
         
-        function closeTaskModal() {
-            const taskModal = document.getElementById('taskModal');
-            const taskForm = document.getElementById('taskForm');
-            
-            if (taskModal) taskModal.classList.remove('active');
-            if (taskForm) taskForm.reset();
-        }
+        // 助成金専用システム - タスクフォームは削除済み
         
-        // Task form submission
-        const taskFormElement = document.getElementById('taskForm');
-        if (taskFormElement) {
-            taskFormElement.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const formData = new FormData(e.target);
-                const taskData = Object.fromEntries(formData);
-                
-                try {
-                    await axios.post('/api/tasks', taskData);
-                    closeTaskModal();
-                    await loadDashboard();
-                    alert('タスクを作成しました');
-                } catch (error) {
-                    alert('タスクの作成に失敗しました');
-                }
-            });
-        } else {
-            console.warn('taskForm element not found, skipping event listener');
-        }
-        
-        // AI Task Generation
-        async function generateTasksWithAI() {
-            const clientSelectEl = document.getElementById('aiClientSelect');
-            const monthSelectEl = document.getElementById('aiMonthSelect');
-            
-            if (!clientSelectEl || !monthSelectEl) {
-                console.error('AI select elements not found');
-                alert('AI機能の要素が見つかりません');
-                return;
-            }
-            
-            const clientId = clientSelectEl.value;
-            const month = monthSelectEl.value;
-            
-            if (!clientId || !month) {
-                alert('顧問先と対象月を選択してください');
-                return;
-            }
-            
-            const resultDiv = document.getElementById('aiGenerationResult');
-            if (!resultDiv) {
-                console.error('aiGenerationResult element not found');
-                alert('結果表示要素が見つかりません');
-                return;
-            }
-            
-            resultDiv.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-2xl text-purple-600"></i><p class="mt-2">AIがタスクを生成中...</p></div>';
-            
-            try {
-                const res = await axios.post('/api/ai/generate-tasks', {
-                    client_id: parseInt(clientId),
-                    month: month
-                });
-                
-                if (res.data.success) {
-                    resultDiv.innerHTML = \`
-                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
-                            <i class="fas fa-check-circle mr-2"></i>
-                            \${res.data.message}
-                        </div>
-                    \`;
-                    await loadDashboard();
-                }
-            } catch (error) {
-                resultDiv.innerHTML = \`
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                        <i class="fas fa-exclamation-circle mr-2"></i>
-                        タスク生成に失敗しました: \${error.response?.data?.error || 'Unknown error'}
-                    </div>
-                \`;
-            }
-        }
-        
-        // Quick task status update for dashboard
-
-        
-        // Set default month (with null check)
-        const aiMonthSelectEl = document.getElementById('aiMonthSelect');
-        if (aiMonthSelectEl) {
-            aiMonthSelectEl.value = new Date().toISOString().slice(0, 7);
-        }
+        // 助成金専用システム - AI機能は削除済み
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', init);
@@ -2693,23 +2013,7 @@ app.get('/', async (c) => {
   `)
 })
 
-// Tasks page
-app.get('/tasks', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(getTasksPage(payload))
-})
+// 助成金専用システム - タスクページは削除
 
 // Debug clients page (NO AUTH - for testing)
 app.get('/clients-debug', async (c) => {
@@ -2769,89 +2073,13 @@ app.get('/clients', async (c) => {
   return c.html(getSimplifiedClientsPage(user.name))
 })
 
-// Reports page
-app.get('/reports', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(getReportsPage(payload.name))
-})
+// 助成金専用システム - レポートページは削除
 
-// Settings page
-app.get('/settings', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  const user = await getUserByEmail(c.env.DB, payload.email)
-  if (!user) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(getSettingsPage(user.name, user.id))
-})
+// 助成金専用システム - 設定ページは削除
 
-// Unified Calendar/Schedule page (core feature)
-app.get('/calendar', async (c) => {
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  return c.html(getSchedulePage(payload.name, payload.role || 'user'))
-})
+// 助成金専用システム - カレンダーページは削除
 
-// Unified Business Management page (core feature consolidation)
-app.get('/business', async (c) => {
-  console.log('Business Management page accessed - URL:', c.req.url)
-  
-  const token = getCookie(c, 'auth-token')
-  
-  if (!token) {
-    return c.redirect('/login')
-  }
-  
-  const jwtSecret = c.env.JWT_SECRET || 'dev-secret-key-please-change-in-production'
-  const payload = await verifyToken(token, jwtSecret)
-  
-  if (!payload) {
-    return c.redirect('/login')
-  }
-  
-  // Set cache-busting headers
-  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
-  c.header('Pragma', 'no-cache')
-  c.header('Expires', '0')
-  
-  return c.html(getBusinessManagementPage(payload))
-})
+// 助成金専用システム - 業務管理ページは削除
 
 // Root page - Dashboard
 app.get('/', async (c) => {
@@ -2890,7 +2118,7 @@ app.get('/', async (c) => {
               <!-- Header -->
               <header class="bg-blue-600 text-white p-4">
                   <div class="container mx-auto flex justify-between items-center">
-                      <h1 class="text-2xl font-bold">社労士事務所管理システム</h1>
+                      <h1 class="text-2xl font-bold">助成金管理システム</h1>
                       <div class="flex items-center gap-4">
                           <span>こんにちは、${payload.name}さん</span>
                           <button onclick="window.location.href='/logout'" class="bg-blue-700 px-4 py-2 rounded">ログアウト</button>
@@ -2902,12 +2130,8 @@ app.get('/', async (c) => {
               <nav class="bg-white shadow-md p-4">
                   <div class="container mx-auto">
                       <div class="flex space-x-6">
-                          <a href="/business" class="text-blue-600 hover:text-blue-800">業務管理</a>
-                          <a href="/subsidies" class="text-blue-600 hover:text-blue-800">助成金管理</a>
+                          <a href="/subsidies" class="text-yellow-600 hover:text-yellow-800 font-semibold">助成金管理</a>
                           <a href="/clients" class="text-blue-600 hover:text-blue-800">顧問先管理</a>
-                          <a href="/calendar" class="text-blue-600 hover:text-blue-800">スケジュール</a>
-                          <a href="/reports" class="text-blue-600 hover:text-blue-800">レポート</a>
-                          <a href="/settings" class="text-blue-600 hover:text-blue-800">設定</a>
                       </div>
                   </div>
               </nav>
@@ -2915,32 +2139,45 @@ app.get('/', async (c) => {
               <!-- Main Content -->
               <main class="container mx-auto p-6">
                   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <!-- Quick Access Cards -->
+                      <!-- 助成金専用クイックアクセスカード -->
                       <div class="bg-white p-6 rounded-lg shadow">
-                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-tasks mr-2"></i>業務管理</h2>
-                          <p class="text-gray-600 mb-4">タスクとプロジェクトの管理</p>
-                          <a href="/business" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">アクセス</a>
+                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-coins mr-2 text-yellow-600"></i>助成金管理</h2>
+                          <p class="text-gray-600 mb-4">申請から受給までの管理</p>
+                          <a href="/subsidies" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700">アクセス</a>
                       </div>
                       
                       <div class="bg-white p-6 rounded-lg shadow">
-                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-money-bill mr-2"></i>助成金管理</h2>
-                          <p class="text-gray-600 mb-4">助成金申請の管理</p>
-                          <a href="/subsidies" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">アクセス</a>
+                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-users mr-2 text-blue-600"></i>顧問先管理</h2>
+                          <p class="text-gray-600 mb-4">申請者情報の管理</p>
+                          <a href="/clients" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">アクセス</a>
                       </div>
                       
                       <div class="bg-white p-6 rounded-lg shadow">
-                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-users mr-2"></i>顧問先管理</h2>
-                          <p class="text-gray-600 mb-4">顧問先情報の管理</p>
-                          <a href="/clients" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">アクセス</a>
+                          <h2 class="text-xl font-bold mb-4"><i class="fas fa-search mr-2 text-green-600"></i>助成金検索</h2>
+                          <p class="text-gray-600 mb-4">利用可能な助成金の検索</p>
+                          <a href="/subsidies?tab=search" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">アクセス</a>
                       </div>
                   </div>
                   
-                  <!-- Welcome Message -->
-                  <div class="mt-8 bg-white p-6 rounded-lg shadow">
-                      <h2 class="text-2xl font-bold mb-4">ようこそ、${payload.name}さん</h2>
-                      <p class="text-gray-600">
-                          社労士事務所管理システムへようこそ。左上のメニューから各機能にアクセスできます。
+                  <!-- 助成金専用メッセージ -->
+                  <div class="mt-8 bg-gradient-to-r from-yellow-50 to-amber-50 p-6 rounded-lg shadow border-l-4 border-yellow-400">
+                      <h2 class="text-2xl font-bold mb-4 text-gray-900">
+                          <i class="fas fa-coins text-yellow-600 mr-2"></i>
+                          ようこそ、${payload.name}さん
+                      </h2>
+                      <p class="text-gray-700 leading-relaxed">
+                          助成金管理システムへようこそ。このシステムでは、助成金の申請から受給までを一元管理し、効率的な業務を実現します。
                       </p>
+                      <div class="mt-4 flex space-x-4">
+                          <a href="/subsidies" class="inline-flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
+                              <i class="fas fa-plus-circle mr-2"></i>
+                              新規申請を作成
+                          </a>
+                          <a href="/subsidies?tab=search" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                              <i class="fas fa-search mr-2"></i>
+                              助成金を検索
+                          </a>
+                      </div>
                   </div>
               </main>
           </div>
@@ -2950,10 +2187,14 @@ app.get('/', async (c) => {
   }
 })
 
-// Redirect old routes to simplified structure
-app.get('/schedule', async (c) => c.redirect('/calendar'))
-app.get('/projects', async (c) => c.redirect('/business'))
-app.get('/tasks', async (c) => c.redirect('/business'))
+// 助成金専用システム - リダイレクト設定
+app.get('/schedule', async (c) => c.redirect('/subsidies'))
+app.get('/projects', async (c) => c.redirect('/subsidies'))
+app.get('/tasks', async (c) => c.redirect('/subsidies'))
+app.get('/business', async (c) => c.redirect('/subsidies'))
+app.get('/calendar', async (c) => c.redirect('/subsidies'))
+app.get('/reports', async (c) => c.redirect('/subsidies'))
+app.get('/settings', async (c) => c.redirect('/subsidies'))
 app.get('/gmail', async (c) => c.redirect('/'))
 app.get('/admin', async (c) => c.redirect('/'))
 
