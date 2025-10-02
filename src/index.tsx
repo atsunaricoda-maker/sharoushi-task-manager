@@ -1683,9 +1683,9 @@ app.get('/', async (c) => {
                 新しく追加する
             </h3>
             <div class="flex justify-center space-x-4">
-                <button onclick="openTaskModal()" class="bg-blue-600 text-white px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors shadow-lg text-lg">
-                    <i class="fas fa-plus mr-2"></i>今日やることを追加
-                </button>
+                <a href="/subsidies" class="bg-yellow-600 text-white px-8 py-4 rounded-xl hover:bg-yellow-700 transition-colors shadow-lg text-lg inline-flex items-center">
+                    <i class="fas fa-coins mr-2"></i>助成金申請を追加
+                </a>
             </div>
         </div>
     </main>
@@ -1847,88 +1847,8 @@ app.get('/', async (c) => {
             }
         }
         
-        // 助成金専用 - displayTasks関数を削除してloadSubsidyApplicationsに置き換え
-        function displayTasks_REMOVED_FOR_SUBSIDY_ONLY(tasks) {
-            const taskList = document.getElementById('taskList');
-            
-            if (!taskList) {
-                console.error('taskList element not found');
-                return;
-            }
-            
-            if (tasks.length === 0) {
-                taskList.innerHTML = '<p class="text-gray-500 text-center py-4">タスクがありません</p>';
-                return;
-            }
-            
-            taskList.innerHTML = tasks.slice(0, 5).map(task => {
-                const priorityColors = {
-                    urgent: 'text-red-600 bg-red-50',
-                    high: 'text-orange-600 bg-orange-50',
-                    medium: 'text-blue-600 bg-blue-50',
-                    low: 'text-gray-600 bg-gray-50'
-                };
-                
-                const priorityLabels = {
-                    urgent: '緊急',
-                    high: '高',
-                    medium: '中',
-                    low: '低'
-                };
-                
-                const statusLabels = {
-                    pending: '未開始',
-                    in_progress: '進行中',
-                    completed: '完了'
-                };
-                
-                const statusColors = {
-                    pending: 'bg-gray-100 text-gray-800',
-                    in_progress: 'bg-blue-100 text-blue-800', 
-                    completed: 'bg-green-100 text-green-800'
-                };
-                
-                return \`
-                    <div class="border rounded-lg p-4 hover:shadow-lg hover:border-blue-300 transition-all duration-200 priority-\${task.priority} cursor-pointer" onclick="viewTaskDetail(\${task.id})" title="クリックで詳細表示">
-                        <div class="flex justify-between items-start">
-                            <div class="flex-1">
-                                <h3 class="font-medium text-gray-900 hover:text-blue-600 transition-colors">\${task.title}</h3>
-                                \${task.description ? \`<p class="text-sm text-gray-600 mt-1">\${task.description}</p>\` : ''}
-                                <div class="flex items-center mt-2 text-sm text-gray-600">
-                                    <i class="fas fa-building mr-1"></i>
-                                    <span class="mr-3">\${task.client_name || '-'}</span>
-                                    <i class="fas fa-user mr-1"></i>
-                                    <span>\${task.assignee_name || '-'}</span>
-                                </div>
-                                <div class="flex items-center mt-2 space-x-3">
-                                    <span class="px-2 py-1 text-xs font-medium rounded \${statusColors[task.status]}">
-                                        \${statusLabels[task.status] || task.status}
-                                    </span>
-                                    \${task.progress !== null ? \`<span class="text-xs text-gray-500">進捗: \${task.progress}%</span>\` : ''}
-                                </div>
-                            </div>
-                            <div class="flex flex-col items-end space-y-2">
-                                <span class="px-2 py-1 text-xs font-medium rounded-full \${priorityColors[task.priority]}">
-                                    \${priorityLabels[task.priority]}
-                                </span>
-                                <span class="text-sm text-gray-600">
-                                    <i class="fas fa-calendar mr-1"></i>
-                                    \${task.due_date ? new Date(task.due_date).toLocaleDateString('ja-JP') : '期限なし'}
-                                </span>
-                                <div class="flex space-x-1">
-                                    <button onclick="event.stopPropagation(); quickUpdateTaskStatus(\${task.id}, '\${task.status}')" class="text-blue-600 hover:text-blue-800 text-sm p-1" title="進捗更新">
-                                        <i class="fas fa-arrow-right"></i>
-                                    </button>
-                                    <button onclick="event.stopPropagation(); quickEditTask(\${task.id})" class="text-green-600 hover:text-green-800 text-sm p-1" title="編集">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                \`;
-            }).join('');
-        }
+        // 助成金専用システム - 不要な関数は削除済み
+
         
         // 助成金専用システム - タスク関連機能は削除済み
         
