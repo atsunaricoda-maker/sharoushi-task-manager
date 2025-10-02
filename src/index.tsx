@@ -1811,32 +1811,32 @@ app.get('/', async (c) => {
                     rejected: '否認'
                 };
                 
-                subsidyList.innerHTML = applications.map(app => `
-                    <div class="border rounded-lg p-4 hover:shadow-lg hover:border-yellow-300 transition-all duration-200 cursor-pointer" onclick="window.location.href='/subsidies'" title="クリックで詳細表示">
-                        <div class="flex justify-between items-start">
-                            <div class="flex-1">
-                                <h3 class="font-medium text-gray-900 hover:text-yellow-600 transition-colors">${app.subsidy_name}</h3>
-                                <div class="flex items-center mt-2 text-sm text-gray-600">
-                                    <i class="fas fa-building mr-1"></i>
-                                    <span class="mr-3">${app.client_name || '-'}</span>
-                                    <i class="fas fa-yen-sign mr-1"></i>
-                                    <span>${app.expected_amount ? app.expected_amount.toLocaleString() + '円' : '-'}</span>
-                                </div>
-                                <div class="flex items-center mt-2 space-x-3">
-                                    <span class="px-2 py-1 text-xs font-medium rounded ${statusColors[app.status]}">
-                                        ${statusLabels[app.status] || app.status}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="flex flex-col items-end space-y-2">
-                                <span class="text-sm text-gray-600">
-                                    <i class="fas fa-calendar mr-1"></i>
-                                    ${app.deadline_date ? new Date(app.deadline_date).toLocaleDateString('ja-JP') : '期限なし'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
+                subsidyList.innerHTML = applications.map(app => 
+                    '<div class="border rounded-lg p-4 hover:shadow-lg hover:border-yellow-300 transition-all duration-200 cursor-pointer" onclick="window.location.href=\'/subsidies\'" title="クリックで詳細表示">' +
+                        '<div class="flex justify-between items-start">' +
+                            '<div class="flex-1">' +
+                                '<h3 class="font-medium text-gray-900 hover:text-yellow-600 transition-colors">' + app.subsidy_name + '</h3>' +
+                                '<div class="flex items-center mt-2 text-sm text-gray-600">' +
+                                    '<i class="fas fa-building mr-1"></i>' +
+                                    '<span class="mr-3">' + (app.client_name || '-') + '</span>' +
+                                    '<i class="fas fa-yen-sign mr-1"></i>' +
+                                    '<span>' + (app.expected_amount ? app.expected_amount.toLocaleString() + '円' : '-') + '</span>' +
+                                '</div>' +
+                                '<div class="flex items-center mt-2 space-x-3">' +
+                                    '<span class="px-2 py-1 text-xs font-medium rounded ' + statusColors[app.status] + '">' +
+                                        (statusLabels[app.status] || app.status) +
+                                    '</span>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="flex flex-col items-end space-y-2">' +
+                                '<span class="text-sm text-gray-600">' +
+                                    '<i class="fas fa-calendar mr-1"></i>' +
+                                    (app.deadline_date ? new Date(app.deadline_date).toLocaleDateString('ja-JP') : '期限なし') +
+                                '</span>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>'
+                ).join('');
                 
             } catch (error) {
                 console.error('Failed to load subsidy applications:', error);
@@ -2096,20 +2096,14 @@ app.get('/', async (c) => {
     return c.redirect('/login')
   }
   
-  try {
-    // Check if admin-dashboard page function exists
-    const { getAdminDashboardPage } = await import('./pages/admin-dashboard')
-    return c.html(getAdminDashboardPage(payload.name, payload.role || 'user'))
-  } catch (error) {
-    console.error('Dashboard page error:', error)
-    // Fallback to a simple dashboard
-    return c.html(`
+  // 助成金専用システム - シンプルダッシュボード
+  return c.html(`
       <!DOCTYPE html>
       <html lang="ja">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>ダッシュボード - 社労士事務所タスク管理</title>
+          <title>ダッシュボード - 助成金管理システム</title>
           <script src="https://cdn.tailwindcss.com"></script>
           <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
       </head>
@@ -2184,7 +2178,6 @@ app.get('/', async (c) => {
       </body>
       </html>
     `)
-  }
 })
 
 // 助成金専用システム - リダイレクト設定
